@@ -92,8 +92,11 @@
   .modal-overlay{ position:fixed; inset:0; background:rgba(10,22,40,.7); z-index:1000; display:none; align-items:center; justify-content:center; padding:20px; backdrop-filter: blur(6px);}
   .modal-overlay.aberto{ display:flex;}
   .modal{ background:#fff; border-radius:16px; max-width:1100px; width:100%; max-height:90vh; overflow:auto; box-shadow:var(--sombra-forte);}
-  #modalPonto .modal{ max-width:2200px; width:98vw; max-height:96vh;}
-  #panorama{ height: 72vh !important; min-height: 500px;}
+  /* Modal do ponto em tela cheia: vale para Visualizar, Histórico, Comparar e Nova Foto */
+  #modalPonto{ padding:0;}
+  #modalPonto .modal{ max-width:none; width:100vw; max-height:none; height:100vh; border-radius:0;}
+  /* Altura descontando cabeçalho, abas, barra de botões e rodapé de observações */
+  #panorama{ height: calc(100vh - 230px) !important; min-height: 340px;}
   .mini-mapa-box{ padding:10px; background:#fafbfc; border:1px solid var(--cinza-borda); border-radius:8px; position:sticky; top:0;}
   .mini-mapa-box .titulo-mm{ font-size:13px; color:var(--azul); margin-bottom:8px; font-weight:700; display:flex; align-items:center; gap:6px;}
   .mini-mapa-box canvas{ display:block; max-width:100%; height:auto; border-radius:6px; background:#f4f5f7; margin:0 auto; border:1px solid var(--cinza-borda);}
@@ -111,7 +114,11 @@
   .form-row{ margin-bottom:12px;}
   .form-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:12px;}
   #panorama, #panorama2, #panorama3{ width:100%; height:500px; background:#000; border-radius:6px;}
-  .comparativo-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:14px;}
+  #panorama2, #panorama3{ height: calc(100vh - 252px); min-height:340px; border-radius:0;}
+  .comparativo-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:3px;}
+  .barra-comparar{ display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;}
+  .barra-comparar .dica{ font-size:12px; color:#666;}
+  #btnTravaComparar.travado{ background:var(--verde); color:#fff;}
   .comparativo-col h4{ margin:0 0 6px; color:var(--azul); font-size:14px;}
   .comparativo-col select{ margin-bottom:8px;}
   @media (max-width:800px){ .comparativo-grid{ grid-template-columns:1fr;} #panorama, #panorama2, #panorama3{ height:340px;} }
@@ -520,6 +527,10 @@
       <div id="timelineVazio" class="vazio" style="display:none;"><h3>Sem fotos</h3></div>
     </div>
     <div id="tab-comparar" class="aba-conteudo" style="display:none;">
+      <div class="barra-comparar">
+        <button id="btnTravaComparar" class="small" onclick="alternarTravaComparar()">🔓 Travar giro</button>
+        <span class="dica">Deixe as duas fotos apontando para o mesmo detalhe e trave: elas passam a girar juntas.</span>
+      </div>
       <div class="comparativo-grid">
         <div class="comparativo-col"><h4>📷 A</h4><select id="selectDataA" onchange="carregarComparativo()"></select><div id="panorama2"></div></div>
         <div class="comparativo-col"><h4>📷 B</h4><select id="selectDataB" onchange="carregarComparativo()"></select><div id="panorama3"></div></div>
@@ -700,7 +711,8 @@ let estado = {
   tagsAtuais:[], zoomPlanta:1, tamanhoPonto:34,
   panoramaViewer:null, panorama2Viewer:null, panorama3Viewer:null,
   realtimeChannel:null,
-  pontoObj:null, pontosObra:[], trocandoPonto:false, miniMapaPontos:[]
+  pontoObj:null, pontosObra:[], trocandoPonto:false, miniMapaPontos:[],
+  travaComparar:{ativo:false,mestre:'A',dYaw:0,dPitch:0}, syncRAF:null
 };
 
 // ============= UTILS =============
@@ -1197,6 +1209,12 @@ document.addEventListener('DOMContentLoaded',()=>{
   });
   const wrap=document.getElementById('plantaWrap');
   if(wrap)wrap.addEventListener('wheel',(e)=>{ if(!e.ctrlKey&&!e.metaKey)return; e.preventDefault(); zoomPlanta(e.deltaY<0?0.15:-0.15); },{passive:false});
+  // Comparativo: a foto tocada por último passa a comandar o giro da outra
+  [['panorama2','A'],['panorama3','B']].forEach(([divId,qual])=>{
+    const el=document.getElementById(divId);
+    if(!el) return;
+    ['mousedown','touchstart','wheel'].forEach(ev=>el.addEventListener(ev,()=>marcarMestreComparar(qual),{passive:true}));
+  });
   const ti=document.getElementById('tagInput');
   if(ti)ti.addEventListener('keydown',(e)=>{
     if(e.key==='Enter'||e.key===','){ e.preventDefault(); adicionarTag(ti.value); ti.value=''; }
@@ -1713,7 +1731,75 @@ async function excluirMarcacaoAtual(){
   await carregarVisualizacao();
 }
 
+// ============= TRAVA DE GIRO DO COMPARATIVO =============
+// Nao depende de calibrar nada: o usuario aponta as duas fotos para o mesmo
+// detalhe e trava. A diferenca entre os angulos daquele instante vira o desvio
+// que e mantido enquanto ele gira qualquer uma das duas.
+function normalizarYaw(y){ return ((y+180)%360+360)%360-180; }
+
+function pararSincronia(){
+  if(estado.syncRAF){ cancelAnimationFrame(estado.syncRAF); estado.syncRAF=null; }
+  estado.travaComparar={ativo:false,mestre:'A',dYaw:0,dPitch:0};
+  atualizarBotaoTrava();
+}
+
+function atualizarBotaoTrava(){
+  const b=document.getElementById('btnTravaComparar');
+  if(!b) return;
+  const on=!!(estado.travaComparar && estado.travaComparar.ativo);
+  b.textContent = on ? '🔒 Giro travado' : '🔓 Travar giro';
+  b.classList.toggle('travado',on);
+}
+
+// Quem o usuario tocou por ultimo comanda; o outro segue.
+function marcarMestreComparar(qual){
+  if(estado.travaComparar && estado.travaComparar.ativo) estado.travaComparar.mestre=qual;
+}
+
+function alternarTravaComparar(){
+  if(estado.travaComparar && estado.travaComparar.ativo){ pararSincronia(); toast('Giro destravado'); return; }
+  const A=estado.panorama2Viewer, B=estado.panorama3Viewer;
+  if(!A||!B){ toast('Escolha as duas datas primeiro','erro'); return; }
+  try{
+    estado.travaComparar={
+      ativo:true, mestre:'A',
+      dYaw: normalizarYaw(B.getYaw()-A.getYaw()),
+      dPitch: B.getPitch()-A.getPitch()
+    };
+  }catch(e){ console.error(e); toast('Aguarde as fotos terminarem de carregar','erro'); return; }
+  iniciarSincronia();
+  atualizarBotaoTrava();
+  toast('Travado: as duas fotos giram juntas','sucesso');
+}
+
+function iniciarSincronia(){
+  if(estado.syncRAF) return;
+  const passo=()=>{
+    const t=estado.travaComparar;
+    if(!t || !t.ativo){ estado.syncRAF=null; return; }
+    estado.syncRAF=requestAnimationFrame(passo);
+    const A=estado.panorama2Viewer, B=estado.panorama3Viewer;
+    if(!A||!B) return;
+    try{
+      const porB = t.mestre==='B';
+      const mestre = porB ? B : A;
+      const escravo = porB ? A : B;
+      const sinal = porB ? -1 : 1;
+      const yaw = normalizarYaw(mestre.getYaw() + sinal*t.dYaw);
+      const pitch = mestre.getPitch() + sinal*t.dPitch;
+      const hfov = mestre.getHfov();
+      if(Math.abs(normalizarYaw(escravo.getYaw()-yaw))>0.02
+         || Math.abs(escravo.getPitch()-pitch)>0.02
+         || Math.abs(escravo.getHfov()-hfov)>0.02){
+        escravo.lookAt(pitch, yaw, hfov, 0);
+      }
+    }catch(e){}
+  };
+  estado.syncRAF=requestAnimationFrame(passo);
+}
+
 async function carregarComparativo(){
+  pararSincronia();
   const ids=[document.getElementById('selectDataA').value,document.getElementById('selectDataB').value];
   const divs=['panorama2','panorama3'];
   const keys=['panorama2Viewer','panorama3Viewer'];
@@ -1861,7 +1947,7 @@ async function excluirFotoAtual(){
 function abrirModal(id){ document.getElementById(id).classList.add('aberto'); }
 function fecharModal(id){
   document.getElementById(id).classList.remove('aberto');
-  if(id==='modalPonto'){ ['panoramaViewer','panorama2Viewer','panorama3Viewer'].forEach(k=>{ if(estado[k]){ try{estado[k].destroy();}catch(e){} estado[k]=null; } }); }
+  if(id==='modalPonto'){ pararSincronia(); ['panoramaViewer','panorama2Viewer','panorama3Viewer'].forEach(k=>{ if(estado[k]){ try{estado[k].destroy();}catch(e){} estado[k]=null; } }); }
 }
 
 // ============= RELATÓRIO =============
