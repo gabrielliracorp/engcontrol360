@@ -92,11 +92,12 @@
   .modal-overlay{ position:fixed; inset:0; background:rgba(10,22,40,.7); z-index:1000; display:none; align-items:center; justify-content:center; padding:20px; backdrop-filter: blur(6px);}
   .modal-overlay.aberto{ display:flex;}
   .modal{ background:#fff; border-radius:16px; max-width:1100px; width:100%; max-height:90vh; overflow:auto; box-shadow:var(--sombra-forte);}
-  #modalPonto .modal{ max-width:1700px; width:98vw; max-height:96vh;}
+  #modalPonto .modal{ max-width:2200px; width:98vw; max-height:96vh;}
   #panorama{ height: 72vh !important; min-height: 500px;}
-  .mini-mapa-box{ margin-top:8px; padding:10px; background:#fafafa; border:1px solid var(--cinza-borda); border-radius:8px;}
-  .mini-mapa-box .titulo-mm{ font-size:12px; color:#666; margin-bottom:6px; font-weight:600; display:flex; align-items:center; gap:6px;}
-  .mini-mapa-box canvas{ display:block; max-width:100%; height:auto; border-radius:4px; background:#f4f5f7; margin:0 auto;}
+  .mini-mapa-box{ padding:10px; background:#fafbfc; border:1px solid var(--cinza-borda); border-radius:8px; position:sticky; top:0;}
+  .mini-mapa-box .titulo-mm{ font-size:13px; color:var(--azul); margin-bottom:8px; font-weight:700; display:flex; align-items:center; gap:6px;}
+  .mini-mapa-box canvas{ display:block; max-width:100%; height:auto; border-radius:6px; background:#f4f5f7; margin:0 auto; border:1px solid var(--cinza-borda);}
+  .mini-mapa-box .dica-mm{ font-size:11px; color:#888; margin-top:8px; text-align:center; line-height:1.5;}
   .modal-head{ padding:14px 18px; border-bottom:1px solid var(--cinza-borda); display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; background:#fff; z-index:2;}
   .modal-head h3{ margin:0; color:var(--azul);}
   .modal-body{ padding:18px;}
@@ -136,8 +137,22 @@
   .pill.verde{ background:#dcfce7; color:var(--verde);}
   .pill.cinza{ background:#eee; color:#666;}
   .pill.laranja{ background:#fff3e0; color:var(--laranja);}
-  .visualizador-layout{ display:grid; grid-template-columns: 1fr 320px; gap:12px;}
-  @media (max-width:900px){ .visualizador-layout{ grid-template-columns:1fr;} }
+  .visualizador-layout{ display:grid; grid-template-columns: minmax(300px,30%) 1fr 320px; gap:12px; align-items:start;}
+  .visualizador-layout > .col-foto{ min-width:0;}
+  /* Painel de marcações recolhido: os 320px voltam para a foto */
+  .visualizador-layout.marc-oculto{ grid-template-columns: minmax(300px,30%) 1fr;}
+  .visualizador-layout.marc-oculto > .painel-marcacoes{ display:none;}
+  @media (max-width:1280px){
+    .visualizador-layout{ grid-template-columns: 1fr 320px; grid-template-areas:"foto marc" "mapa marc";}
+    .visualizador-layout > .col-foto{ grid-area:foto;}
+    .visualizador-layout > .mini-mapa-box{ grid-area:mapa; position:static;}
+    .visualizador-layout > .painel-marcacoes{ grid-area:marc;}
+    .visualizador-layout.marc-oculto{ grid-template-columns:1fr; grid-template-areas:"foto" "mapa";}
+  }
+  @media (max-width:900px){
+    .visualizador-layout{ grid-template-columns:1fr; grid-template-areas:"foto" "mapa" "marc";}
+    .visualizador-layout.marc-oculto{ grid-template-columns:1fr; grid-template-areas:"foto" "mapa";}
+  }
   .painel-marcacoes{ background:#fafbfc; border:1px solid var(--cinza-borda); border-radius:8px; padding:10px; max-height:580px; overflow:auto;}
   .painel-marcacoes h4{ margin:0 0 8px; font-size:14px; color:var(--azul); display:flex; justify-content:space-between; align-items:center;}
   .filtros-marcacao{ display:flex; gap:4px; margin-bottom:8px; flex-wrap:wrap;}
@@ -163,15 +178,6 @@
   .custom-hotspot:hover{ transform:scale(1.15);}
   .custom-hotspot.resolvida{ background: linear-gradient(135deg, #10B981, #00B4F0); animation:none;}
   .custom-hotspot.urgente{ background: linear-gradient(135deg, #EF4444, #F59E0B);}
-  /* Setas de navegacao entre pontos (estilo Street View). Sem transform no elemento
-     externo: o Pannellum usa transform para posicionar o hotspot na foto. */
-  .nav-hotspot{ display:flex; flex-direction:column; align-items:center; cursor:pointer;}
-  .nav-hotspot .seta{ width:46px; height:46px; border-radius:50%; background:rgba(255,255,255,.9); border:3px solid var(--azul-claro); color:var(--azul); display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:800; line-height:1; box-shadow:0 4px 16px rgba(0,0,0,.5); transition:transform .15s, background .15s;}
-  .nav-hotspot:hover .seta{ transform:scale(1.18); background:#fff; border-color:var(--roxo);}
-  .nav-hotspot .rotulo{ margin-top:5px; background:rgba(10,22,40,.85); color:#fff; font-size:11px; font-weight:700; padding:3px 9px; border-radius:10px; white-space:nowrap; max-width:170px; overflow:hidden; text-overflow:ellipsis; box-shadow:0 2px 8px rgba(0,0,0,.45);}
-  .calib-box{ display:flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--cinza-borda); border-radius:6px; padding:4px 8px; font-size:11px; color:#666;}
-  .calib-box input[type=range]{ width:110px; padding:0;}
-  .calib-box .valor{ font-weight:700; min-width:34px; text-align:center; color:var(--azul);}
   @keyframes pulse{ 0%, 100% { box-shadow: 0 4px 14px rgba(0,0,0,.5), 0 0 0 0 rgba(168,85,247,.7);} 50% { box-shadow: 0 4px 14px rgba(0,0,0,.5), 0 0 0 14px rgba(168,85,247,0);} }
   .thread{ margin-top:10px; padding:10px; background:#f8f9fa; border-radius:6px; max-height:300px; overflow:auto;}
   .resposta{ background:#fff; border:1px solid var(--cinza-borda); border-radius:6px; padding:8px 10px; margin-bottom:8px;}
@@ -490,17 +496,17 @@
       <div style="display:flex; gap:8px; margin-bottom:10px; align-items:center; flex-wrap:wrap;">
         <label style="margin:0;">Data:</label><select id="selectDataVisualizar" onchange="carregarVisualizacao()"></select>
         <span id="obsVisualizar" style="font-size:12px; color:#666; flex:1;"></span>
-        <button id="btnSetasNav" class="small" onclick="alternarSetasNav()" title="Mostrar/ocultar as setas para os outros pontos">🧭 Setas</button>
-        <span class="calib-box" id="calibBox" style="display:none;" title="Gire até as setas baterem com o que você vê na foto">🧭 Direção
-          <input type="range" id="calibNorte" min="0" max="359" step="1" value="0" oninput="previewNorte(this.value)" onchange="aplicarPreviewNorte()" />
-          <span class="valor" id="calibValor">0°</span>
-          <button class="small primary" onclick="salvarNorte()">Salvar</button>
-        </span>
+        <button id="btnPainelMarc" class="small" onclick="alternarPainelMarcacoes()" title="Recolher o painel de marcações para a foto ficar maior">📌 Marcações</button>
         <button id="btnAddMarcacao" class="primary small" onclick="toggleAdicionarMarcacao()">📍 Marcar Ponto</button>
         <button class="small danger" onclick="excluirFotoAtual()">🗑 Excluir foto</button>
       </div>
       <div class="visualizador-layout">
-        <div><div id="panorama"></div><div id="obsFull" style="margin-top:8px; padding:10px; background:#fafafa; border-radius:6px; font-size:13px;"></div><div class="mini-mapa-box" id="miniMapaBox" style="display:none;"><div class="titulo-mm">📍 Localização do ponto na planta baixa:</div><canvas id="miniMapaPlanta"></canvas></div></div>
+        <div class="mini-mapa-box" id="miniMapaBox" style="display:none;">
+          <div class="titulo-mm">🗺️ Planta da obra</div>
+          <canvas id="miniMapaPlanta" onclick="cliqueMiniMapa(event)" onmousemove="moverMiniMapa(event)"></canvas>
+          <div class="dica-mm">Clique em um ponto para ir direto até ele</div>
+        </div>
+        <div class="col-foto"><div id="panorama"></div><div id="obsFull" style="margin-top:8px; padding:10px; background:#fafafa; border-radius:6px; font-size:13px;"></div></div>
         <aside class="painel-marcacoes">
           <h4>📌 Marcações <span id="contadorMarcacoes" style="font-size:12px; font-weight:400;"></span></h4>
           <div class="filtros-marcacao" id="filtrosMarcacao"></div>
@@ -650,8 +656,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const AUTOR_KEY = 'ec360_autor';
 const ZOOM_KEY_PREFIX = 'ec360_zoom_';
 const TAM_PONTO_KEY_PREFIX = 'ec360_tampto_';
-const SETAS_KEY = 'ec360_setas_nav';
-const MAX_SETAS_NAV = 6;
+const PAINEL_MARC_KEY = 'ec360_painel_marc';
 const MAX_360_WIDTH = 8192;
 const JPG_QUALITY = 0.95;
 
@@ -695,8 +700,7 @@ let estado = {
   tagsAtuais:[], zoomPlanta:1, tamanhoPonto:34,
   panoramaViewer:null, panorama2Viewer:null, panorama3Viewer:null,
   realtimeChannel:null,
-  pontoObj:null, pontosObra:[], norteAtual:0, idsSetas:[], trocandoPonto:false,
-  mostrarSetas: localStorage.getItem(SETAS_KEY)!=='0'
+  pontoObj:null, pontosObra:[], trocandoPonto:false, miniMapaPontos:[]
 };
 
 // ============= UTILS =============
@@ -1293,10 +1297,8 @@ async function abrirPonto(id){
   document.getElementById('pontoTitulo').textContent=`Ponto ${p.numero} - ${p.nome}`;
   // Vizinhos da mesma obra: origem das setas de navegação dentro da foto
   estado.pontoObj=p;
-  estado.norteAtual=Number(p.norte)||0;
   const { data: irmaos } = await sb.from('pontos').select('*').eq('obra_id',p.obra_id).order('numero');
   estado.pontosObra=irmaos||[];
-  atualizarUISetas();
   // Evita que trocarTab carregue a foto do ponto anterior antes dos selects trocarem
   estado.trocandoPonto=true;
   try { trocarTab('visualizar'); } finally { estado.trocandoPonto=false; }
@@ -1306,146 +1308,126 @@ async function abrirPonto(id){
   document.getElementById('obsFoto').value='';
   document.getElementById('previewFoto360').style.display='none';
   await preencherSelectsData();
-  renderMiniMapaPlanta(p);
+  // Precisa do modal já visível: o tamanho do mapa vem da largura real da coluna
   abrirModal('modalPonto');
+  aplicarEstadoPainelMarc();
+  renderMiniMapaPlanta(p);
 }
 
 async function renderMiniMapaPlanta(ponto){
+  const box = document.getElementById('miniMapaBox');
   try {
     const { data: planta } = await sb.from('plantas').select('*').eq('obra_id',ponto.obra_id).maybeSingle();
-    const box = document.getElementById('miniMapaBox');
-    if (!planta) { box.style.display='none'; return; }
-    const url = getStorageUrl('plantas',planta.storage_path);
+    if (!planta || !planta.storage_path) { box.style.display='none'; return; }
+    box.style.display='block';
     const canvas = document.getElementById('miniMapaPlanta');
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      const maxW = 800, maxH = 260;
-      const scale = Math.min(maxW/img.naturalWidth, maxH/img.naturalHeight);
-      canvas.width = Math.round(img.naturalWidth * scale);
-      canvas.height = Math.round(img.naturalHeight * scale);
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle='#f4f5f7'; ctx.fillRect(0,0,canvas.width,canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      const cx = canvas.width * (Number(ponto.x)/100);
-      const cy = canvas.height * (Number(ponto.y)/100);
-      ctx.fillStyle = 'rgba(0,180,240,.35)';
-      ctx.beginPath(); ctx.arc(cx, cy, 14, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle = '#00B4F0';
-      ctx.beginPath(); ctx.arc(cx, cy, 8, 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5;
-      ctx.stroke();
-      // Número do ponto
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 10px Arial';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(ponto.numero), cx, cy+0.5);
+      estado.miniMapaImg = img;
+      redimensionarMiniMapa();
       box.style.display='block';
     };
     img.onerror = () => { box.style.display='none'; };
-    img.src = url;
-  } catch(e){ console.error(e); document.getElementById('miniMapaBox').style.display='none'; }
+    img.src = getStorageUrl('plantas',planta.storage_path);
+  } catch(e){ console.error(e); box.style.display='none'; }
 }
 
-// ============= NAVEGAÇÃO ENTRE PONTOS (estilo Street View) =============
-// A direção de um ponto para o outro vem das coordenadas x/y da planta baixa.
-// Como a foto 360 não sabe para que lado a câmera estava virada, cada ponto tem
-// um ajuste ("norte") que gira todas as setas de uma vez até baterem com a cena.
-// null e '' viram 0 no Number(), o que colocaria o ponto no canto da planta
-// e geraria uma seta apontando para o lugar errado. Por isso a checagem explícita.
-function coordValida(v){ return v!==null && v!==undefined && v!=='' && isFinite(Number(v)); }
-
-function montarSetasNavegacao(){
-  const atual=estado.pontoObj;
-  if(!atual || !Array.isArray(estado.pontosObra)) return [];
-  if(!coordValida(atual.x) || !coordValida(atual.y)) return [];
-  const ax=Number(atual.x), ay=Number(atual.y);
-  const viz=estado.pontosObra
-    .filter(p=>p.id!==atual.id && coordValida(p.x) && coordValida(p.y))
-    .map(p=>{
-      const dx=Number(p.x)-ax, dy=Number(p.y)-ay;
-      // 0° = para cima na planta, crescendo no sentido horário
-      return { p, dist:Math.hypot(dx,dy), rumo:Math.atan2(dx,-dy)*180/Math.PI };
-    })
-    .filter(v=>v.dist>0.01)
-    .sort((a,b)=>a.dist-b.dist)
-    .slice(0,MAX_SETAS_NAV);
-  if(!viz.length) return [];
-  const dmax=viz[viz.length-1].dist||1;
-  const norte=Number(estado.norteAtual)||0;
-  return viz.map(v=>{
-    let yaw=v.rumo-norte;
-    yaw=((yaw+180)%360+360)%360-180;
-    // Pontos mais próximos aparecem mais baixos, dando noção de distância
-    const pitch=-30+18*(v.dist/dmax);
-    return {
-      id:'nav_'+v.p.id, pitch, yaw, cssClass:'nav-hotspot',
-      createTooltipFunc:(div,args)=>{
-        div.innerHTML='<div class="seta">↑</div><div class="rotulo">'+escapar(args.rotulo)+'</div>';
-        div.title='Ir para: '+args.rotulo;
-      },
-      createTooltipArgs:{rotulo:v.p.numero+' · '+v.p.nome},
-      clickHandlerFunc:()=>abrirPonto(v.p.id)
-    };
+// Desenha a planta com TODOS os pontos da obra. O atual fica azul e destacado;
+// os demais sao roxos e clicaveis. Guarda as posicoes para o teste de clique.
+function desenharMiniMapa(atual){
+  const canvas=document.getElementById('miniMapaPlanta');
+  const img=estado.miniMapaImg;
+  if(!canvas || !img) return;
+  const ctx=canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.fillStyle='#f4f5f7'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  const r=Math.max(10,Math.min(16,canvas.width*0.035));
+  estado.miniMapaPontos=[];
+  (estado.pontosObra||[]).forEach(p=>{
+    if(!coordValida(p.x)||!coordValida(p.y)) return;
+    const cx=canvas.width*(Number(p.x)/100), cy=canvas.height*(Number(p.y)/100);
+    const eAtual = atual && p.id===atual.id;
+    estado.miniMapaPontos.push({id:p.id, cx, cy, r, atual:!!eAtual});
+    ctx.beginPath(); ctx.arc(cx,cy,r+5,0,Math.PI*2);
+    ctx.fillStyle = eAtual ? 'rgba(0,180,240,.35)' : 'rgba(10,22,40,.20)';
+    ctx.fill();
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+    ctx.fillStyle = eAtual ? '#00B4F0' : '#A855F7';
+    ctx.fill();
+    ctx.lineWidth = eAtual ? 3.5 : 2.5;
+    ctx.strokeStyle = '#fff';
+    ctx.stroke();
+    ctx.fillStyle='#fff';
+    ctx.font='bold '+Math.round(r*1.05)+'px Arial';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(String(p.numero), cx, cy+0.5);
   });
 }
 
-// Troca as setas sem recriar o visualizador (não rebaixa a foto do servidor)
-function reaplicarSetas(){
-  const v=estado.panoramaViewer;
-  if(!v) return;
-  (estado.idsSetas||[]).forEach(id=>{ try{ v.removeHotSpot(id); }catch(e){} });
-  estado.idsSetas=[];
-  if(!estado.mostrarSetas) return;
-  montarSetasNavegacao().forEach(h=>{ try{ v.addHotSpot(h); estado.idsSetas.push(h.id); }catch(e){ console.error(e); } });
+// A planta ocupa a largura real da coluna, por isso o modal precisa estar aberto
+// antes de medir. Recalcula tambem quando o espaco muda (recolher painel/resize).
+function redimensionarMiniMapa(){
+  const canvas=document.getElementById('miniMapaPlanta');
+  const img=estado.miniMapaImg;
+  if(!canvas || !img || !img.naturalWidth) return;
+  const larg=Math.max(240,(canvas.parentElement.clientWidth||300)-22);
+  const altMax=Math.max(260,Math.round(window.innerHeight*0.62));
+  const escala=Math.min(larg/img.naturalWidth, altMax/img.naturalHeight);
+  canvas.width=Math.round(img.naturalWidth*escala);
+  canvas.height=Math.round(img.naturalHeight*escala);
+  desenharMiniMapa(estado.pontoObj);
 }
 
-function alternarSetasNav(){
-  estado.mostrarSetas=!estado.mostrarSetas;
-  localStorage.setItem(SETAS_KEY, estado.mostrarSetas?'1':'0');
-  atualizarUISetas();
-  reaplicarSetas();
-}
-
-function atualizarUISetas(){
-  const b=document.getElementById('btnSetasNav');
+function aplicarEstadoPainelMarc(){
+  const lay=document.querySelector('#tab-visualizar .visualizador-layout');
+  if(!lay) return;
+  const oculto = localStorage.getItem(PAINEL_MARC_KEY)==='1';
+  lay.classList.toggle('marc-oculto', oculto);
+  const b=document.getElementById('btnPainelMarc');
   if(b){
-    b.textContent = estado.mostrarSetas ? '🧭 Setas' : '🧭 Setas (ocultas)';
-    b.style.opacity = estado.mostrarSetas ? '1' : '.55';
+    b.textContent = oculto ? '📌 Marcações (ocultas)' : '📌 Marcações';
+    b.style.opacity = oculto ? '.55' : '1';
   }
-  const cx=document.getElementById('calibBox');
-  if(cx) cx.style.display = (estado.mostrarSetas && pode('ponto_editar')) ? 'flex' : 'none';
-  const sl=document.getElementById('calibNorte');
-  if(sl) sl.value=Number(estado.norteAtual)||0;
-  const lb=document.getElementById('calibValor');
-  if(lb) lb.textContent=(Number(estado.norteAtual)||0)+'°';
 }
 
-function previewNorte(v){
-  estado.norteAtual=Number(v)||0;
-  const lb=document.getElementById('calibValor');
-  if(lb) lb.textContent=estado.norteAtual+'°';
+function alternarPainelMarcacoes(){
+  const oculto = localStorage.getItem(PAINEL_MARC_KEY)==='1';
+  localStorage.setItem(PAINEL_MARC_KEY, oculto?'0':'1');
+  aplicarEstadoPainelMarc();
+  // O espaço mudou: o Pannellum precisa ser avisado e a planta redesenhada
+  setTimeout(()=>{
+    if(estado.panoramaViewer){ try{ estado.panoramaViewer.resize(); }catch(e){} }
+    redimensionarMiniMapa();
+  },60);
 }
 
-function aplicarPreviewNorte(){ reaplicarSetas(); }
-
-async function salvarNorte(){
-  if(!exigirPermissao('ponto_editar'))return;
-  const v=Number(document.getElementById('calibNorte').value)||0;
-  const { error } = await sb.from('pontos').update({ norte:v }).eq('id',estado.pontoAtual);
-  if(error){
-    console.error(error);
-    toast('Não foi possível salvar: falta a coluna "norte" na tabela pontos. O ajuste vale só até fechar.','erro');
-    return;
-  }
-  estado.norteAtual=v;
-  if(estado.pontoObj) estado.pontoObj.norte=v;
-  const i=(estado.pontosObra||[]).findIndex(p=>p.id===estado.pontoAtual);
-  if(i>=0) estado.pontosObra[i].norte=v;
-  await registrarAuditoria('editar','ponto',estado.pontoAtual,'Calibrou a direção das setas: '+v+'°');
-  toast('Direção salva','sucesso');
+// O canvas pode estar reduzido pelo CSS (max-width:100%), entao converte a
+// posicao do mouse para as coordenadas internas do desenho.
+function pontoSobMouse(ev){
+  const canvas=document.getElementById('miniMapaPlanta');
+  if(!canvas || !canvas.width) return null;
+  const cr=canvas.getBoundingClientRect();
+  if(!cr.width || !cr.height) return null;
+  const x=(ev.clientX-cr.left)*(canvas.width/cr.width);
+  const y=(ev.clientY-cr.top)*(canvas.height/cr.height);
+  return (estado.miniMapaPontos||[]).find(p=>Math.hypot(p.cx-x,p.cy-y)<=p.r+4) || null;
 }
+
+function cliqueMiniMapa(ev){
+  const alvo=pontoSobMouse(ev);
+  if(alvo && !alvo.atual) abrirPonto(alvo.id);
+}
+
+function moverMiniMapa(ev){
+  const alvo=pontoSobMouse(ev);
+  const canvas=document.getElementById('miniMapaPlanta');
+  if(canvas) canvas.style.cursor = (alvo && !alvo.atual) ? 'pointer' : 'default';
+}
+
+// null e '' viram 0 no Number(), o que colocaria o ponto no canto da planta.
+function coordValida(v){ return v!==null && v!==undefined && v!=='' && isFinite(Number(v)); }
 
 async function preencherSelectsData(){
   const { data: fotos } = await sb.from('fotos').select('*').eq('ponto_id',estado.pontoAtual).order('data',{ascending:false});
@@ -1495,13 +1477,11 @@ async function carregarVisualizacao(){
     createTooltipArgs:{numero:m.numero,titulo:m.titulo},
     clickHandlerFunc:()=>abrirDetalheMarcacao(m.id)
   }));
-  const setas = estado.mostrarSetas ? montarSetasNavegacao() : [];
-  estado.idsSetas = setas.map(h=>h.id);
   estado.panoramaViewer=pannellum.viewer('panorama',{
     type:'equirectangular',panorama:url,autoLoad:true,
     showZoomCtrl:true,showFullscreenCtrl:true,compass:false,
     hfov:100,minHfov:30,maxHfov:120,friction:0.15,
-    hotSpots:hotSpots.concat(setas),hotSpotDebug:false,crossOrigin:'anonymous'
+    hotSpots,hotSpotDebug:false,crossOrigin:'anonymous'
   });
   let dX=0,dY=0,dT=0;
   const panEl=document.getElementById('panorama');
@@ -2123,6 +2103,8 @@ document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click
   if(m.id==='modalPonto' || m.id==='modalNovaMarcacao' || m.id==='modalDetalheMarcacao') return;
   if(e.target===m) fecharModal(m.id);
 }));
+
+window.addEventListener('resize',()=>{ clearTimeout(estado._tmMapa); estado._tmMapa=setTimeout(redimensionarMiniMapa,200); });
 
 // INIT
 inicializar();
