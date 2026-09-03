@@ -566,6 +566,7 @@
   <div class="modal-head"><h3>👥 Usuários</h3><button class="fechar" onclick="fecharModal('modalUsuarios')">×</button></div>
   <div class="modal-body">
     <div style="font-size:13px; color:#666; margin-bottom:12px;">Os usuários se cadastram pela tela de login. Aqui você define o perfil e as permissões de cada um.</div>
+    <div id="avisoPendentes" class="alerta" style="display:none;"></div>
     <table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Criado em</th><th>Ações</th></tr></thead><tbody id="tbodyUsuarios"></tbody></table>
   </div>
 </div></div>
@@ -690,14 +691,19 @@ function getStorageUrl(bucket, path){ if(!path)return null; const {data}=sb.stor
 // ============= AUTH =============
 async function inicializar(){
   try {
+    let msgLogin='';
     const { data: { session } } = await sb.auth.getSession();
     if(session){
       await carregarUsuarioLogado();
-      if(usuarioLogado && usuarioLogado.ativo !== false){
+      if(usuarioLogado && usuarioLogado.ativo !== false && !estaPendente(usuarioLogado)){
         document.getElementById('loadingInicial').style.display='none';
         entrarNoSistema();
         return;
-      } else if(usuarioLogado && usuarioLogado.ativo === false){
+      } else if(usuarioLogado){
+        // Desativado ou ainda sem liberação: encerra a sessão em vez de deixar entrar
+        msgLogin = usuarioLogado.ativo === false
+          ? 'Usuário desativado'
+          : '⏳ Cadastro recebido! Aguarde o administrador liberar seu acesso.';
         await sb.auth.signOut();
         usuarioLogado = null;
       }
@@ -709,6 +715,7 @@ async function inicializar(){
       setTimeout(()=>document.getElementById('setupNome').focus(),200);
     } else {
       document.getElementById('telaLogin').classList.add('ativa');
+      if(msgLogin) document.getElementById('loginErro').textContent=msgLogin;
       setTimeout(()=>document.getElementById('loginEmail').focus(),200);
     }
   } catch(e){
@@ -786,6 +793,7 @@ async function efetuarLogin(){
   await carregarUsuarioLogado();
   if(!usuarioLogado){ erro.textContent='Perfil não encontrado'; await sb.auth.signOut(); return; }
   if(usuarioLogado.ativo === false){ erro.textContent='Usuário desativado'; await sb.auth.signOut(); usuarioLogado=null; return; }
+  if(estaPendente(usuarioLogado)){ erro.textContent='⏳ Cadastro recebido! Aguarde o administrador liberar seu acesso.'; await sb.auth.signOut(); usuarioLogado=null; return; }
 
   document.getElementById('loginSenha').value='';
   document.getElementById('telaLogin').classList.remove('ativa');
@@ -830,6 +838,16 @@ function iniciarRealtime(){
 
 function pode(p){ return usuarioLogado && (usuarioLogado.permissoes||[]).includes(p); }
 function exigirPermissao(p,msg){ if(!pode(p)){ toast('⛔ Sem permissão: '+(msg||PERMISSOES.find(x=>x.id===p)?.label||p),'erro'); return false;} return true; }
+// Cadastro novo que o administrador ainda nao liberou: perfil existe, mas sem nenhuma permissao marcada.
+// Enquanto estiver assim o usuario nao entra no sistema (nao ve obras, fotos nem marcacoes).
+function estaPendente(u){
+  if(!u) return true;
+  const p = u.permissoes;
+  if(p == null) return true;
+  if(Array.isArray(p)) return p.length === 0;
+  // Tolera a coluna gravada como texto: só é pendente se estiver realmente vazia.
+  return String(p).replace(/[[\]\s"']/g,'') === '';
+}
 
 function aplicarPermissoesUI(){
   const defs=[
@@ -883,9 +901,16 @@ async function abrirGerenciarUsuarios(){
   if(!exigirPermissao('usuario_gerenciar'))return;
   const { data: us, error } = await sb.from('profiles').select('*').order('nome');
   if(error){ toast('Erro: '+error.message,'erro'); return; }
-  document.getElementById('tbodyUsuarios').innerHTML=(us||[]).map(u=>{
-    const pn=PERFIS[u.perfil]?.nome||'Customizado';
-    const cor=PERFIS[u.perfil]?.cor||'#666';
+  // Quem aguarda liberação vai para o topo da lista
+  const lista=(us||[]).slice().sort((a,b)=>(estaPendente(b)?1:0)-(estaPendente(a)?1:0));
+  const qtdPend=lista.filter(u=>estaPendente(u)).length;
+  const aviso=document.getElementById('avisoPendentes');
+  aviso.textContent = qtdPend ? `⏳ ${qtdPend} usuário(s) aguardando liberação. Clique em ✎ para definir o perfil e liberar o acesso.` : '';
+  aviso.style.display = qtdPend ? 'block' : 'none';
+  document.getElementById('tbodyUsuarios').innerHTML=lista.map(u=>{
+    const pend=estaPendente(u);
+    const pn=pend?'⏳ Pendente':(PERFIS[u.perfil]?.nome||'Customizado');
+    const cor=pend?'var(--amarelo)':(PERFIS[u.perfil]?.cor||'#666');
     const at=u.ativo!==false;
     return `<tr style="${!at?'opacity:.5;':''}"><td><strong>${escapar(u.nome)}</strong>${u.cargo?`<br><small style="color:#888;">${escapar(u.cargo)}</small>`:''}</td><td>${escapar(u.email)}</td><td><span class="perfil-pill" style="background:${cor};">${escapar(pn)}</span></td><td>${u.criado_em?formatarDataHora(u.criado_em):'-'}</td><td>
       <button class="small" onclick="editarUsuario('${u.id}')">✎</button>
