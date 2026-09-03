@@ -163,6 +163,15 @@
   .custom-hotspot:hover{ transform:scale(1.15);}
   .custom-hotspot.resolvida{ background: linear-gradient(135deg, #10B981, #00B4F0); animation:none;}
   .custom-hotspot.urgente{ background: linear-gradient(135deg, #EF4444, #F59E0B);}
+  /* Setas de navegacao entre pontos (estilo Street View). Sem transform no elemento
+     externo: o Pannellum usa transform para posicionar o hotspot na foto. */
+  .nav-hotspot{ display:flex; flex-direction:column; align-items:center; cursor:pointer;}
+  .nav-hotspot .seta{ width:46px; height:46px; border-radius:50%; background:rgba(255,255,255,.9); border:3px solid var(--azul-claro); color:var(--azul); display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:800; line-height:1; box-shadow:0 4px 16px rgba(0,0,0,.5); transition:transform .15s, background .15s;}
+  .nav-hotspot:hover .seta{ transform:scale(1.18); background:#fff; border-color:var(--roxo);}
+  .nav-hotspot .rotulo{ margin-top:5px; background:rgba(10,22,40,.85); color:#fff; font-size:11px; font-weight:700; padding:3px 9px; border-radius:10px; white-space:nowrap; max-width:170px; overflow:hidden; text-overflow:ellipsis; box-shadow:0 2px 8px rgba(0,0,0,.45);}
+  .calib-box{ display:flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--cinza-borda); border-radius:6px; padding:4px 8px; font-size:11px; color:#666;}
+  .calib-box input[type=range]{ width:110px; padding:0;}
+  .calib-box .valor{ font-weight:700; min-width:34px; text-align:center; color:var(--azul);}
   @keyframes pulse{ 0%, 100% { box-shadow: 0 4px 14px rgba(0,0,0,.5), 0 0 0 0 rgba(168,85,247,.7);} 50% { box-shadow: 0 4px 14px rgba(0,0,0,.5), 0 0 0 14px rgba(168,85,247,0);} }
   .thread{ margin-top:10px; padding:10px; background:#f8f9fa; border-radius:6px; max-height:300px; overflow:auto;}
   .resposta{ background:#fff; border:1px solid var(--cinza-borda); border-radius:6px; padding:8px 10px; margin-bottom:8px;}
@@ -481,6 +490,12 @@
       <div style="display:flex; gap:8px; margin-bottom:10px; align-items:center; flex-wrap:wrap;">
         <label style="margin:0;">Data:</label><select id="selectDataVisualizar" onchange="carregarVisualizacao()"></select>
         <span id="obsVisualizar" style="font-size:12px; color:#666; flex:1;"></span>
+        <button id="btnSetasNav" class="small" onclick="alternarSetasNav()" title="Mostrar/ocultar as setas para os outros pontos">🧭 Setas</button>
+        <span class="calib-box" id="calibBox" style="display:none;" title="Gire até as setas baterem com o que você vê na foto">🧭 Direção
+          <input type="range" id="calibNorte" min="0" max="359" step="1" value="0" oninput="previewNorte(this.value)" onchange="aplicarPreviewNorte()" />
+          <span class="valor" id="calibValor">0°</span>
+          <button class="small primary" onclick="salvarNorte()">Salvar</button>
+        </span>
         <button id="btnAddMarcacao" class="primary small" onclick="toggleAdicionarMarcacao()">📍 Marcar Ponto</button>
         <button class="small danger" onclick="excluirFotoAtual()">🗑 Excluir foto</button>
       </div>
@@ -635,6 +650,8 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const AUTOR_KEY = 'ec360_autor';
 const ZOOM_KEY_PREFIX = 'ec360_zoom_';
 const TAM_PONTO_KEY_PREFIX = 'ec360_tampto_';
+const SETAS_KEY = 'ec360_setas_nav';
+const MAX_SETAS_NAV = 6;
 const MAX_360_WIDTH = 8192;
 const JPG_QUALITY = 0.95;
 
@@ -677,7 +694,9 @@ let estado = {
   marcacaoAtual:null, filtroMarcacao:'todas', editandoMarcacao:null,
   tagsAtuais:[], zoomPlanta:1, tamanhoPonto:34,
   panoramaViewer:null, panorama2Viewer:null, panorama3Viewer:null,
-  realtimeChannel:null
+  realtimeChannel:null,
+  pontoObj:null, pontosObra:[], norteAtual:0, idsSetas:[], trocandoPonto:false,
+  mostrarSetas: localStorage.getItem(SETAS_KEY)!=='0'
 };
 
 // ============= UTILS =============
@@ -1272,7 +1291,15 @@ async function abrirPonto(id){
   estado.pontoAtual=id;
   const { data: p } = await sb.from('pontos').select('*').eq('id',id).single();
   document.getElementById('pontoTitulo').textContent=`Ponto ${p.numero} - ${p.nome}`;
-  trocarTab('visualizar');
+  // Vizinhos da mesma obra: origem das setas de navegação dentro da foto
+  estado.pontoObj=p;
+  estado.norteAtual=Number(p.norte)||0;
+  const { data: irmaos } = await sb.from('pontos').select('*').eq('obra_id',p.obra_id).order('numero');
+  estado.pontosObra=irmaos||[];
+  atualizarUISetas();
+  // Evita que trocarTab carregue a foto do ponto anterior antes dos selects trocarem
+  estado.trocandoPonto=true;
+  try { trocarTab('visualizar'); } finally { estado.trocandoPonto=false; }
   document.getElementById('dataFoto').value=new Date().toISOString().split('T')[0];
   document.getElementById('foto360Input').value='';
   document.getElementById('semanaFoto').value='';
@@ -1321,6 +1348,105 @@ async function renderMiniMapaPlanta(ponto){
   } catch(e){ console.error(e); document.getElementById('miniMapaBox').style.display='none'; }
 }
 
+// ============= NAVEGAÇÃO ENTRE PONTOS (estilo Street View) =============
+// A direção de um ponto para o outro vem das coordenadas x/y da planta baixa.
+// Como a foto 360 não sabe para que lado a câmera estava virada, cada ponto tem
+// um ajuste ("norte") que gira todas as setas de uma vez até baterem com a cena.
+// null e '' viram 0 no Number(), o que colocaria o ponto no canto da planta
+// e geraria uma seta apontando para o lugar errado. Por isso a checagem explícita.
+function coordValida(v){ return v!==null && v!==undefined && v!=='' && isFinite(Number(v)); }
+
+function montarSetasNavegacao(){
+  const atual=estado.pontoObj;
+  if(!atual || !Array.isArray(estado.pontosObra)) return [];
+  if(!coordValida(atual.x) || !coordValida(atual.y)) return [];
+  const ax=Number(atual.x), ay=Number(atual.y);
+  const viz=estado.pontosObra
+    .filter(p=>p.id!==atual.id && coordValida(p.x) && coordValida(p.y))
+    .map(p=>{
+      const dx=Number(p.x)-ax, dy=Number(p.y)-ay;
+      // 0° = para cima na planta, crescendo no sentido horário
+      return { p, dist:Math.hypot(dx,dy), rumo:Math.atan2(dx,-dy)*180/Math.PI };
+    })
+    .filter(v=>v.dist>0.01)
+    .sort((a,b)=>a.dist-b.dist)
+    .slice(0,MAX_SETAS_NAV);
+  if(!viz.length) return [];
+  const dmax=viz[viz.length-1].dist||1;
+  const norte=Number(estado.norteAtual)||0;
+  return viz.map(v=>{
+    let yaw=v.rumo-norte;
+    yaw=((yaw+180)%360+360)%360-180;
+    // Pontos mais próximos aparecem mais baixos, dando noção de distância
+    const pitch=-30+18*(v.dist/dmax);
+    return {
+      id:'nav_'+v.p.id, pitch, yaw, cssClass:'nav-hotspot',
+      createTooltipFunc:(div,args)=>{
+        div.innerHTML='<div class="seta">↑</div><div class="rotulo">'+escapar(args.rotulo)+'</div>';
+        div.title='Ir para: '+args.rotulo;
+      },
+      createTooltipArgs:{rotulo:v.p.numero+' · '+v.p.nome},
+      clickHandlerFunc:()=>abrirPonto(v.p.id)
+    };
+  });
+}
+
+// Troca as setas sem recriar o visualizador (não rebaixa a foto do servidor)
+function reaplicarSetas(){
+  const v=estado.panoramaViewer;
+  if(!v) return;
+  (estado.idsSetas||[]).forEach(id=>{ try{ v.removeHotSpot(id); }catch(e){} });
+  estado.idsSetas=[];
+  if(!estado.mostrarSetas) return;
+  montarSetasNavegacao().forEach(h=>{ try{ v.addHotSpot(h); estado.idsSetas.push(h.id); }catch(e){ console.error(e); } });
+}
+
+function alternarSetasNav(){
+  estado.mostrarSetas=!estado.mostrarSetas;
+  localStorage.setItem(SETAS_KEY, estado.mostrarSetas?'1':'0');
+  atualizarUISetas();
+  reaplicarSetas();
+}
+
+function atualizarUISetas(){
+  const b=document.getElementById('btnSetasNav');
+  if(b){
+    b.textContent = estado.mostrarSetas ? '🧭 Setas' : '🧭 Setas (ocultas)';
+    b.style.opacity = estado.mostrarSetas ? '1' : '.55';
+  }
+  const cx=document.getElementById('calibBox');
+  if(cx) cx.style.display = (estado.mostrarSetas && pode('ponto_editar')) ? 'flex' : 'none';
+  const sl=document.getElementById('calibNorte');
+  if(sl) sl.value=Number(estado.norteAtual)||0;
+  const lb=document.getElementById('calibValor');
+  if(lb) lb.textContent=(Number(estado.norteAtual)||0)+'°';
+}
+
+function previewNorte(v){
+  estado.norteAtual=Number(v)||0;
+  const lb=document.getElementById('calibValor');
+  if(lb) lb.textContent=estado.norteAtual+'°';
+}
+
+function aplicarPreviewNorte(){ reaplicarSetas(); }
+
+async function salvarNorte(){
+  if(!exigirPermissao('ponto_editar'))return;
+  const v=Number(document.getElementById('calibNorte').value)||0;
+  const { error } = await sb.from('pontos').update({ norte:v }).eq('id',estado.pontoAtual);
+  if(error){
+    console.error(error);
+    toast('Não foi possível salvar: falta a coluna "norte" na tabela pontos. O ajuste vale só até fechar.','erro');
+    return;
+  }
+  estado.norteAtual=v;
+  if(estado.pontoObj) estado.pontoObj.norte=v;
+  const i=(estado.pontosObra||[]).findIndex(p=>p.id===estado.pontoAtual);
+  if(i>=0) estado.pontosObra[i].norte=v;
+  await registrarAuditoria('editar','ponto',estado.pontoAtual,'Calibrou a direção das setas: '+v+'°');
+  toast('Direção salva','sucesso');
+}
+
 async function preencherSelectsData(){
   const { data: fotos } = await sb.from('fotos').select('*').eq('ponto_id',estado.pontoAtual).order('data',{ascending:false});
   const opts=(fotos||[]).map(f=>`<option value="${f.id}">${formatarData(f.data)}${f.semana?' - '+escapar(f.semana):''}</option>`).join('');
@@ -1343,6 +1469,7 @@ function trocarTab(tab){
 }
 
 async function carregarVisualizacao(){
+  if(estado.trocandoPonto) return;
   const id=document.getElementById('selectDataVisualizar').value;
   estado.fotoAtual=id;
   const cont=document.getElementById('panorama');
@@ -1368,11 +1495,13 @@ async function carregarVisualizacao(){
     createTooltipArgs:{numero:m.numero,titulo:m.titulo},
     clickHandlerFunc:()=>abrirDetalheMarcacao(m.id)
   }));
+  const setas = estado.mostrarSetas ? montarSetasNavegacao() : [];
+  estado.idsSetas = setas.map(h=>h.id);
   estado.panoramaViewer=pannellum.viewer('panorama',{
     type:'equirectangular',panorama:url,autoLoad:true,
     showZoomCtrl:true,showFullscreenCtrl:true,compass:false,
     hfov:100,minHfov:30,maxHfov:120,friction:0.15,
-    hotSpots,hotSpotDebug:false,crossOrigin:'anonymous'
+    hotSpots:hotSpots.concat(setas),hotSpotDebug:false,crossOrigin:'anonymous'
   });
   let dX=0,dY=0,dT=0;
   const panEl=document.getElementById('panorama');
