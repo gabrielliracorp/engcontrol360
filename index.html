@@ -99,7 +99,12 @@
   #panorama{ height: calc(100vh - 230px) !important; min-height: 340px;}
   .mini-mapa-box{ padding:10px; background:#fafbfc; border:1px solid var(--cinza-borda); border-radius:8px; position:sticky; top:0;}
   .mini-mapa-box .titulo-mm{ font-size:13px; color:var(--azul); margin-bottom:8px; font-weight:700; display:flex; align-items:center; gap:6px;}
-  .mini-mapa-box canvas{ display:block; max-width:100%; height:auto; border-radius:6px; background:#f4f5f7; margin:0 auto; border:1px solid var(--cinza-borda);}
+  .mini-mapa-box .mm-viewport{ overflow:auto; max-height:62vh; border:1px solid var(--cinza-borda); border-radius:6px; background:#f4f5f7; position:relative;}
+  .mini-mapa-box canvas{ display:block; margin:0 auto; background:#f4f5f7;}
+  .mm-controles{ display:flex; gap:6px; align-items:center; margin-top:8px; font-size:11px; color:#555; flex-wrap:nowrap;}
+  .mm-controles button.small{ padding:2px 9px; font-size:13px; line-height:1.4; min-width:28px;}
+  .mm-controles input[type=range]{ flex:1; min-width:60px; margin:0;}
+  .mm-controles .mm-val{ min-width:38px; text-align:center; font-weight:700; color:var(--azul);}
   .mini-mapa-box .dica-mm{ font-size:11px; color:#888; margin-top:8px; text-align:center; line-height:1.5;}
   .modal-head{ padding:14px 18px; border-bottom:1px solid var(--cinza-borda); display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; background:#fff; z-index:2;}
   .modal-head h3{ margin:0; color:var(--azul);}
@@ -510,8 +515,22 @@
       <div class="visualizador-layout">
         <div class="mini-mapa-box" id="miniMapaBox" style="display:none;">
           <div class="titulo-mm">🗺️ Planta da obra</div>
-          <canvas id="miniMapaPlanta" onclick="cliqueMiniMapa(event)" onmousemove="moverMiniMapa(event)"></canvas>
-          <div class="dica-mm">Clique em um ponto para ir direto até ele</div>
+          <div class="mm-viewport" id="miniMapaViewport">
+            <canvas id="miniMapaPlanta" onclick="cliqueMiniMapa(event)" onmousemove="moverMiniMapa(event)"></canvas>
+          </div>
+          <div class="mm-controles">
+            <span>🔍 Planta:</span>
+            <button class="small" onclick="zoomMiniMapa(-0.25)" title="Afastar a planta">−</button>
+            <span class="mm-val" id="mmZoomInfo">100%</span>
+            <button class="small" onclick="zoomMiniMapa(0.25)" title="Aproximar a planta">+</button>
+            <button class="small" onclick="resetZoomMiniMapa()" title="Voltar a planta inteira">⟲</button>
+          </div>
+          <div class="mm-controles">
+            <span>📍 Pontos:</span>
+            <input type="range" id="mmSliderPonto" min="40" max="200" step="10" value="100" oninput="alterarTamanhoPontoMM(this.value)" title="Tamanho das bolinhas na planta">
+            <span class="mm-val" id="mmTamInfo">100%</span>
+          </div>
+          <div class="dica-mm">Clique em um ponto para ir direto até ele<br>Ctrl + rolar sobre a planta dá zoom</div>
         </div>
         <div class="col-foto"><div id="panorama"></div><div id="obsFull" style="margin-top:8px; padding:10px; background:#fafafa; border-radius:6px; font-size:13px;"></div></div>
         <aside class="painel-marcacoes">
@@ -668,6 +687,8 @@ const AUTOR_KEY = 'ec360_autor';
 const ZOOM_KEY_PREFIX = 'ec360_zoom_';
 const TAM_PONTO_KEY_PREFIX = 'ec360_tampto_';
 const PAINEL_MARC_KEY = 'ec360_painel_marc';
+const MM_ZOOM_KEY_PREFIX = 'ec360_mmzoom_';
+const MM_TAM_KEY_PREFIX = 'ec360_mmtam_';
 const MAX_360_WIDTH = 8192;
 const JPG_QUALITY = 0.95;
 
@@ -711,7 +732,7 @@ let estado = {
   tagsAtuais:[], zoomPlanta:1, tamanhoPonto:34,
   panoramaViewer:null, panorama2Viewer:null, panorama3Viewer:null,
   realtimeChannel:null,
-  pontoObj:null, pontosObra:[], trocandoPonto:false, miniMapaPontos:[],
+  pontoObj:null, pontosObra:[], trocandoPonto:false, miniMapaPontos:[], mmZoom:1, mmTam:1, mmBaseW:0, mmDpr:1,
   travaComparar:{ativo:false,mestre:'A',dYaw:0,dPitch:0}, syncRAF:null
 };
 
@@ -1338,7 +1359,7 @@ async function renderMiniMapaPlanta(ponto){
     const { data: planta } = await sb.from('plantas').select('*').eq('obra_id',ponto.obra_id).maybeSingle();
     if (!planta || !planta.storage_path) { box.style.display='none'; return; }
     box.style.display='block';
-    const canvas = document.getElementById('miniMapaPlanta');
+    carregarPrefsMiniMapa(ponto.obra_id);
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -1353,35 +1374,83 @@ async function renderMiniMapaPlanta(ponto){
 
 // Desenha a planta com TODOS os pontos da obra. O atual fica azul e destacado;
 // os demais sao roxos e clicaveis. Guarda as posicoes para o teste de clique.
+// O raio vem da largura BASE (sem zoom): dar zoom na planta afasta os pontos
+// sem engordar as bolinhas. O slider "Pontos" multiplica esse raio.
 function desenharMiniMapa(atual){
   const canvas=document.getElementById('miniMapaPlanta');
   const img=estado.miniMapaImg;
   if(!canvas || !img) return;
   const ctx=canvas.getContext('2d');
+  const dpr=estado.mmDpr||1;
   ctx.clearRect(0,0,canvas.width,canvas.height);
   ctx.fillStyle='#f4f5f7'; ctx.fillRect(0,0,canvas.width,canvas.height);
   ctx.drawImage(img,0,0,canvas.width,canvas.height);
-  const r=Math.max(10,Math.min(16,canvas.width*0.035));
+  const baseW=estado.mmBaseW||(canvas.width/dpr);
+  const r=Math.max(4,Math.min(13,baseW*0.022))*(estado.mmTam||1)*dpr;
+  const mostraNumero = r>=5.5*dpr;
   estado.miniMapaPontos=[];
-  (estado.pontosObra||[]).forEach(p=>{
-    if(!coordValida(p.x)||!coordValida(p.y)) return;
+  const lista=(estado.pontosObra||[]).filter(p=>coordValida(p.x)&&coordValida(p.y));
+  // O ponto atual e desenhado por ultimo para ficar por cima dos vizinhos
+  lista.sort((p1,p2)=>(atual&&p1.id===atual.id?1:0)-(atual&&p2.id===atual.id?1:0));
+  lista.forEach(p=>{
     const cx=canvas.width*(Number(p.x)/100), cy=canvas.height*(Number(p.y)/100);
     const eAtual = atual && p.id===atual.id;
-    estado.miniMapaPontos.push({id:p.id, cx, cy, r, atual:!!eAtual});
-    ctx.beginPath(); ctx.arc(cx,cy,r+5,0,Math.PI*2);
-    ctx.fillStyle = eAtual ? 'rgba(0,180,240,.35)' : 'rgba(10,22,40,.20)';
+    const rp = eAtual ? r*1.25 : r;
+    estado.miniMapaPontos.push({id:p.id, cx, cy, r:rp, atual:!!eAtual, numero:p.numero, nome:p.nome});
+    ctx.beginPath(); ctx.arc(cx,cy,rp+Math.max(2*dpr,rp*0.3),0,Math.PI*2);
+    ctx.fillStyle = eAtual ? 'rgba(0,180,240,.35)' : 'rgba(10,22,40,.18)';
     ctx.fill();
-    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2);
+    ctx.beginPath(); ctx.arc(cx,cy,rp,0,Math.PI*2);
     ctx.fillStyle = eAtual ? '#00B4F0' : '#A855F7';
     ctx.fill();
-    ctx.lineWidth = eAtual ? 3.5 : 2.5;
+    ctx.lineWidth = (eAtual ? 2.5 : 1.6)*dpr*Math.min(1,rp/(9*dpr));
     ctx.strokeStyle = '#fff';
     ctx.stroke();
-    ctx.fillStyle='#fff';
-    ctx.font='bold '+Math.round(r*1.05)+'px Arial';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(String(p.numero), cx, cy+0.5);
+    if(mostraNumero || eAtual){
+      ctx.fillStyle='#fff';
+      ctx.font='bold '+Math.round(Math.max(7*dpr, rp*1.05))+'px Arial';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(String(p.numero), cx, cy+0.5*dpr);
+    }
   });
+}
+
+// Preferencias do mini-mapa (zoom da planta e tamanho dos pontos), por obra
+function carregarPrefsMiniMapa(obraId){
+  estado.mmZoom = Math.max(1,Math.min(4,parseFloat(localStorage.getItem(MM_ZOOM_KEY_PREFIX+obraId))||1));
+  estado.mmTam  = Math.max(.4,Math.min(2,parseFloat(localStorage.getItem(MM_TAM_KEY_PREFIX+obraId))||1));
+  atualizarLabelsMiniMapa();
+}
+function atualizarLabelsMiniMapa(){
+  const z=document.getElementById('mmZoomInfo'); if(z) z.textContent=Math.round((estado.mmZoom||1)*100)+'%';
+  const t=document.getElementById('mmTamInfo'); if(t) t.textContent=Math.round((estado.mmTam||1)*100)+'%';
+  const sl=document.getElementById('mmSliderPonto'); if(sl) sl.value=Math.round((estado.mmTam||1)*100);
+}
+function zoomMiniMapa(d){
+  const z=Math.max(1,Math.min(4,(estado.mmZoom||1)+d));
+  estado.mmZoom=z;
+  if(estado.pontoObj) localStorage.setItem(MM_ZOOM_KEY_PREFIX+estado.pontoObj.obra_id, z.toString());
+  atualizarLabelsMiniMapa();
+  redimensionarMiniMapa();
+}
+function resetZoomMiniMapa(){ zoomMiniMapa(1-(estado.mmZoom||1)); }
+function alterarTamanhoPontoMM(v){
+  const t=Math.max(.4,Math.min(2,(parseInt(v)||100)/100));
+  estado.mmTam=t;
+  if(estado.pontoObj) localStorage.setItem(MM_TAM_KEY_PREFIX+estado.pontoObj.obra_id, t.toString());
+  atualizarLabelsMiniMapa();
+  desenharMiniMapa(estado.pontoObj);
+}
+// Com zoom, rola a janelinha para o ponto atual ficar no centro
+function centralizarMiniMapa(){
+  const vp=document.getElementById('miniMapaViewport');
+  const canvas=document.getElementById('miniMapaPlanta');
+  if(!vp || !canvas) return;
+  const atual=(estado.miniMapaPontos||[]).find(p=>p.atual);
+  if(!atual){ vp.scrollLeft=0; vp.scrollTop=0; return; }
+  const dpr=estado.mmDpr||1;
+  vp.scrollLeft=Math.max(0, atual.cx/dpr - vp.clientWidth/2);
+  vp.scrollTop =Math.max(0, atual.cy/dpr - vp.clientHeight/2);
 }
 
 // A planta ocupa a largura real da coluna, por isso o modal precisa estar aberto
@@ -1390,12 +1459,19 @@ function redimensionarMiniMapa(){
   const canvas=document.getElementById('miniMapaPlanta');
   const img=estado.miniMapaImg;
   if(!canvas || !img || !img.naturalWidth) return;
-  const larg=Math.max(240,(canvas.parentElement.clientWidth||300)-22);
+  const vp=canvas.parentElement;
+  const larg=Math.max(240,(vp.offsetWidth||302)-2);
   const altMax=Math.max(260,Math.round(window.innerHeight*0.62));
-  const escala=Math.min(larg/img.naturalWidth, altMax/img.naturalHeight);
-  canvas.width=Math.round(img.naturalWidth*escala);
-  canvas.height=Math.round(img.naturalHeight*escala);
+  const escalaBase=Math.min(larg/img.naturalWidth, altMax/img.naturalHeight);
+  const zoom=estado.mmZoom||1;
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const cssW=Math.round(img.naturalWidth*escalaBase*zoom), cssH=Math.round(img.naturalHeight*escalaBase*zoom);
+  canvas.style.width=cssW+'px'; canvas.style.height=cssH+'px';
+  canvas.width=Math.round(cssW*dpr); canvas.height=Math.round(cssH*dpr);
+  estado.mmBaseW=img.naturalWidth*escalaBase;
+  estado.mmDpr=dpr;
   desenharMiniMapa(estado.pontoObj);
+  centralizarMiniMapa();
 }
 
 function aplicarEstadoPainelMarc(){
@@ -1441,7 +1517,10 @@ function cliqueMiniMapa(ev){
 function moverMiniMapa(ev){
   const alvo=pontoSobMouse(ev);
   const canvas=document.getElementById('miniMapaPlanta');
-  if(canvas) canvas.style.cursor = (alvo && !alvo.atual) ? 'pointer' : 'default';
+  if(!canvas) return;
+  canvas.style.cursor = (alvo && !alvo.atual) ? 'pointer' : 'default';
+  const dica = alvo ? `Ponto ${alvo.numero} - ${alvo.nome||''}` : '';
+  if(canvas.title!==dica) canvas.title=dica;
 }
 
 // null e '' viram 0 no Number(), o que colocaria o ponto no canto da planta.
@@ -2191,6 +2270,12 @@ document.querySelectorAll('.modal-overlay').forEach(m=>m.addEventListener('click
 }));
 
 window.addEventListener('resize',()=>{ clearTimeout(estado._tmMapa); estado._tmMapa=setTimeout(redimensionarMiniMapa,200); });
+// Ctrl (ou Cmd) + roda do mouse sobre a planta lateral = zoom na planta
+document.getElementById('miniMapaViewport').addEventListener('wheel',ev=>{
+  if(!(ev.ctrlKey||ev.metaKey)) return;
+  ev.preventDefault();
+  zoomMiniMapa(ev.deltaY<0?0.25:-0.25);
+},{passive:false});
 
 // INIT
 inicializar();
