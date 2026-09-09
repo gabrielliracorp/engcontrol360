@@ -119,13 +119,28 @@
   .form-row{ margin-bottom:12px;}
   .form-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:12px;}
   #panorama, #panorama2, #panorama3{ width:100%; height:500px; background:#000; border-radius:6px;}
-  #panorama2, #panorama3{ height: calc(100vh - 252px); min-height:340px; border-radius:0;}
+  #panorama2, #panorama3{ height: calc(100vh - 220px); min-height:340px; border-radius:0;}
   .comparativo-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:3px;}
   .barra-comparar{ display:flex; gap:8px; align-items:center; margin-bottom:8px; flex-wrap:wrap;}
   .barra-comparar .dica{ font-size:12px; color:#666;}
   #btnTravaComparar.travado{ background:var(--verde); color:#fff;}
-  .comparativo-col h4{ margin:0 0 6px; color:var(--azul); font-size:14px;}
-  .comparativo-col select{ margin-bottom:8px;}
+  .comparativo-col h4{ margin:0; color:var(--azul); font-size:14px; white-space:nowrap;}
+  .col-head{ display:flex; align-items:center; gap:8px; margin-bottom:6px;}
+  .col-head select{ margin:0;}
+  /* Modo cheio do comparativo. Usa classe propria em vez de :fullscreen para
+     funcionar mesmo quando o navegador nega a tela cheia nativa. */
+  #comparadorWrap.comparador-cheio{ position:fixed; inset:0; z-index:3000; background:#000; display:flex; flex-direction:column; margin:0; padding:0;}
+  .comparador-cheio .barra-comparar{ position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:20; margin:0; background:rgba(10,22,40,.9); padding:6px 12px; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.55);}
+  .comparador-cheio .barra-comparar .dica{ display:none;}
+  .comparador-cheio .comparativo-grid{ flex:1; min-height:0; gap:2px;}
+  .comparador-cheio .comparativo-col{ position:relative; display:flex; flex-direction:column; min-height:0;}
+  /* Etiquetas na base: o topo-esquerdo tem os controles de zoom do Pannellum
+     e o topo-centro tem a barra de acoes. A fica na base a esquerda, B a direita. */
+  .comparador-cheio .col-head{ position:absolute; bottom:12px; left:12px; top:auto; z-index:15; margin:0; background:rgba(10,22,40,.9); padding:5px 10px; border-radius:8px;}
+  .comparador-cheio .comparativo-col:last-child .col-head{ left:auto; right:12px;}
+  .comparador-cheio .col-head h4{ color:#fff;}
+  .comparador-cheio .col-head select{ width:auto; max-width:200px; font-size:12px; padding:4px 8px;}
+  .comparador-cheio #panorama2, .comparador-cheio #panorama3{ height:100% !important; min-height:0; flex:1; border-radius:0;}
   @media (max-width:800px){ .comparativo-grid{ grid-template-columns:1fr;} #panorama, #panorama2, #panorama3{ height:340px;} }
   .timeline{ display:grid; grid-template-columns: repeat(auto-fill, minmax(200px,1fr)); gap:12px;}
   .timeline-card{ border:1px solid var(--cinza-borda); border-radius:8px; padding:8px; cursor:pointer; background:#fff; transition:.15s;}
@@ -546,13 +561,16 @@
       <div id="timelineVazio" class="vazio" style="display:none;"><h3>Sem fotos</h3></div>
     </div>
     <div id="tab-comparar" class="aba-conteudo" style="display:none;">
-      <div class="barra-comparar">
-        <button id="btnTravaComparar" class="small" onclick="alternarTravaComparar()">🔓 Travar giro</button>
-        <span class="dica">Deixe as duas fotos apontando para o mesmo detalhe e trave: elas passam a girar juntas.</span>
-      </div>
-      <div class="comparativo-grid">
-        <div class="comparativo-col"><h4>📷 A</h4><select id="selectDataA" onchange="carregarComparativo()"></select><div id="panorama2"></div></div>
-        <div class="comparativo-col"><h4>📷 B</h4><select id="selectDataB" onchange="carregarComparativo()"></select><div id="panorama3"></div></div>
+      <div id="comparadorWrap">
+        <div class="barra-comparar">
+          <button id="btnTelaCheiaComparar" class="small primary" onclick="alternarTelaCheiaComparar()">⛶ Tela cheia</button>
+          <button id="btnTravaComparar" class="small" onclick="alternarTravaComparar()">🔓 Travar giro</button>
+          <span class="dica">Deixe as duas fotos apontando para o mesmo detalhe e trave: elas passam a girar juntas.</span>
+        </div>
+        <div class="comparativo-grid">
+          <div class="comparativo-col"><div class="col-head"><h4>📷 A</h4><select id="selectDataA" onchange="carregarComparativo()"></select></div><div id="panorama2"></div></div>
+          <div class="comparativo-col"><div class="col-head"><h4>📷 B</h4><select id="selectDataB" onchange="carregarComparativo()"></select></div><div id="panorama3"></div></div>
+        </div>
       </div>
     </div>
     <div id="tab-upload" class="aba-conteudo" style="display:none;">
@@ -1543,7 +1561,7 @@ function trocarTab(tab){
   document.querySelectorAll('.aba-conteudo').forEach(c=>c.style.display='none');
   document.getElementById('tab-'+tab).style.display='block';
   if(tab==='visualizar')carregarVisualizacao();
-  if(tab==='comparar')carregarComparativo();
+  if(tab==='comparar'){ carregarComparativo(); atualizarBotaoTelaCheia(); }
   if(tab==='historico')carregarTimeline();
 }
 
@@ -1810,6 +1828,68 @@ async function excluirMarcacaoAtual(){
   await carregarVisualizacao();
 }
 
+// ============= TELA CHEIA DO COMPARATIVO =============
+// Duas camadas: a classe .comparador-cheio faz o comparativo ocupar toda a
+// janela (sempre funciona) e, por cima, pedimos a tela cheia do navegador, que
+// remove abas e barra de endereco. Se o navegador negar, o modo cheio continua.
+function elementoTelaCheia(){ return document.fullscreenElement || document.webkitFullscreenElement || null; }
+function comparadorCheio(){
+  const w=document.getElementById('comparadorWrap');
+  return !!w && w.classList.contains('comparador-cheio');
+}
+
+function ajustarVisualizadores(){
+  setTimeout(()=>{
+    ['panorama2Viewer','panorama3Viewer','panoramaViewer'].forEach(k=>{
+      if(estado[k]){ try{ estado[k].resize(); }catch(e){} }
+    });
+  },120);
+}
+
+function atualizarBotaoTelaCheia(){
+  const b=document.getElementById('btnTelaCheiaComparar');
+  if(b) b.textContent = comparadorCheio() ? '✕ Sair (ESC)' : '⛶ Tela cheia';
+}
+
+function entrarTelaCheiaComparar(){
+  const wrap=document.getElementById('comparadorWrap');
+  if(!wrap) return;
+  wrap.classList.add('comparador-cheio');
+  const pedir = wrap.requestFullscreen || wrap.webkitRequestFullscreen;
+  if(pedir){
+    try{ const r=pedir.call(wrap); if(r&&r.catch) r.catch(()=>{}); }catch(e){}
+  }
+  atualizarBotaoTelaCheia();
+  ajustarVisualizadores();
+}
+
+function sairTelaCheiaComparar(){
+  const wrap=document.getElementById('comparadorWrap');
+  if(wrap) wrap.classList.remove('comparador-cheio');
+  if(elementoTelaCheia()){
+    if(document.exitFullscreen) document.exitFullscreen();
+    else if(document.webkitExitFullscreen) document.webkitExitFullscreen();
+  }
+  atualizarBotaoTelaCheia();
+  ajustarVisualizadores();
+}
+
+function alternarTelaCheiaComparar(){
+  if(comparadorCheio()) sairTelaCheiaComparar(); else entrarTelaCheiaComparar();
+}
+
+// ESC do navegador encerra a tela cheia nativa: mantém o nosso modo coerente
+function aoMudarTelaCheia(){
+  if(!elementoTelaCheia() && comparadorCheio()) sairTelaCheiaComparar();
+  else { atualizarBotaoTelaCheia(); ajustarVisualizadores(); }
+}
+document.addEventListener('fullscreenchange', aoMudarTelaCheia);
+document.addEventListener('webkitfullscreenchange', aoMudarTelaCheia);
+// Quando a tela cheia nativa foi negada, o ESC precisa sair pelo nosso caminho
+document.addEventListener('keydown',(e)=>{
+  if(e.key==='Escape' && comparadorCheio() && !elementoTelaCheia()) sairTelaCheiaComparar();
+});
+
 // ============= TRAVA DE GIRO DO COMPARATIVO =============
 // Nao depende de calibrar nada: o usuario aponta as duas fotos para o mesmo
 // detalhe e trava. A diferenca entre os angulos daquele instante vira o desvio
@@ -2026,7 +2106,9 @@ async function excluirFotoAtual(){
 function abrirModal(id){ document.getElementById(id).classList.add('aberto'); }
 function fecharModal(id){
   document.getElementById(id).classList.remove('aberto');
-  if(id==='modalPonto'){ pararSincronia(); ['panoramaViewer','panorama2Viewer','panorama3Viewer'].forEach(k=>{ if(estado[k]){ try{estado[k].destroy();}catch(e){} estado[k]=null; } }); }
+  if(id==='modalPonto'){
+    if(comparadorCheio()) sairTelaCheiaComparar();
+    pararSincronia(); ['panoramaViewer','panorama2Viewer','panorama3Viewer'].forEach(k=>{ if(estado[k]){ try{estado[k].destroy();}catch(e){} estado[k]=null; } }); }
 }
 
 // ============= RELATÓRIO =============
