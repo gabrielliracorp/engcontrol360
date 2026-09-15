@@ -296,6 +296,10 @@
   .user-chip .nome{ font-weight:700;}
   .user-chip .perfil{ font-size:10px; opacity:.8;}
   .perfil-pill{ display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; color:#fff; font-weight:700;}
+  /* Contador de pedidos de acesso no botao Usuarios */
+  .badge-pend{ display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 5px; margin-left:4px; border-radius:var(--r-pill); background:var(--danger); color:#fff; font-size:11px; font-weight:800; font-family:var(--font-mono);}
+  .acoes-liberar{ display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
+  .acoes-liberar select{ width:auto; padding:5px 8px; font-size:12px;}
   .perm-grid{ display:grid; grid-template-columns: 1fr 1fr; gap:6px 12px;}
   .perm-categoria{ grid-column: 1 / -1; font-weight:700; color:var(--ink); margin-top:10px; border-bottom:1px solid var(--line); padding-bottom:4px;}
   .perm-item{ display:flex; align-items:center; gap:6px; font-size:12px; padding:3px 0;}
@@ -445,15 +449,17 @@
       <div class="link">Não tem conta? <a onclick="mostrarCadastro()">Cadastre-se</a></div>
     </div>
     <div id="formCadastro" style="display:none;">
-      <div class="form-row"><label>Nome completo</label><input type="text" id="cadNome" /></div>
+      <div class="form-row"><label>Nome completo *</label><input type="text" id="cadNome" autocomplete="name" /></div>
       <div class="form-row"><label>Cargo / função</label><input type="text" id="cadCargo" placeholder="Ex: Engenheiro de Campo - Obra Iguatu" /></div>
-      <div class="form-row"><label>E-mail</label><input type="email" id="cadEmail" /></div>
-      <div class="form-row"><label>Senha (mín 6 caracteres)</label><input type="password" id="cadSenha" /></div>
-      <button class="entrar" onclick="cadastrarUsuario()">Criar Conta</button>
+      <div class="form-row"><label>E-mail (será o seu login) *</label><input type="email" id="cadEmail" autocomplete="email" /></div>
+      <div class="form-row"><label>Senha (mínimo 6 caracteres) *</label><input type="password" id="cadSenha" autocomplete="new-password" /></div>
+      <div class="form-row"><label>Confirmar senha *</label><input type="password" id="cadSenha2" autocomplete="new-password" onkeydown="if(event.key==='Enter')cadastrarUsuario()" /></div>
+      <button class="entrar" id="btnCadastrar" onclick="cadastrarUsuario()">Enviar pedido de acesso</button>
       <div class="link"><a onclick="mostrarLogin()">← Voltar ao login</a></div>
-      <div style="font-size:11px; color:var(--ink-faint); text-align:center; margin-top:14px;">Após criar sua conta, o administrador precisa liberar suas permissões antes de você acessar o sistema.</div>
+      <div style="font-size:11px; color:var(--ink-faint); text-align:center; margin-top:14px;">Seu pedido vai para o administrador. Assim que ele liberar, você entra com este e-mail e senha.</div>
     </div>
     <div id="loginErro" style="text-align:center; color:var(--danger); margin-top:10px; font-size:13px;"></div>
+    <div id="loginAviso" style="text-align:center; color:var(--success); margin-top:10px; font-size:13px; font-weight:600;"></div>
   </div>
 </div>
 
@@ -680,10 +686,10 @@
   </div>
 </div></div>
 
-<div class="modal-overlay" id="modalUsuarios"><div class="modal" style="max-width:880px;">
-  <div class="modal-head"><h3>👥 Usuários</h3><button class="fechar" onclick="fecharModal('modalUsuarios')">×</button></div>
+<div class="modal-overlay" id="modalUsuarios"><div class="modal" style="max-width:1080px;">
+  <div class="modal-head"><h3>👥 Usuários e acessos</h3><button class="fechar" onclick="fecharModal('modalUsuarios')">×</button></div>
   <div class="modal-body">
-    <div style="font-size:13px; color:var(--ink-soft); margin-bottom:12px;">Os usuários se cadastram pela tela de login. Aqui você define o perfil e as permissões de cada um.</div>
+    <div style="font-size:13px; color:var(--ink-soft); margin-bottom:12px;">Quem precisa de acesso faz o pedido em "Cadastre-se", na tela de login. O pedido aparece aqui: escolha o perfil e clique em ✓ Liberar.</div>
     <div id="avisoPendentes" class="alerta" style="display:none;"></div>
     <table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Criado em</th><th>Ações</th></tr></thead><tbody id="tbodyUsuarios"></tbody></table>
   </div>
@@ -889,29 +895,44 @@ async function criarPrimeiroAdmin(){
   toast('Administrador criado! Bem-vindo.','sucesso');
 }
 
-function mostrarCadastro(){ document.getElementById('formLogin').style.display='none'; document.getElementById('formCadastro').style.display='block'; document.getElementById('loginErro').textContent=''; setTimeout(()=>document.getElementById('cadNome').focus(),100); }
+function mostrarCadastro(){ document.getElementById('formLogin').style.display='none'; document.getElementById('formCadastro').style.display='block'; document.getElementById('loginErro').textContent=''; document.getElementById('loginAviso').textContent=''; setTimeout(()=>document.getElementById('cadNome').focus(),100); }
 function mostrarLogin(){ document.getElementById('formCadastro').style.display='none'; document.getElementById('formLogin').style.display='block'; document.getElementById('loginErro').textContent=''; }
 
 async function cadastrarUsuario(){
+  if(estado.cadastrando) return;
   const nome=document.getElementById('cadNome').value.trim();
   const cargo=document.getElementById('cadCargo').value.trim();
   const email=document.getElementById('cadEmail').value.trim().toLowerCase();
   const senha=document.getElementById('cadSenha').value;
+  const senha2=document.getElementById('cadSenha2').value;
   const erro=document.getElementById('loginErro');
-  erro.textContent='';
-  if(!nome||!email||!senha){ erro.textContent='Preencha todos os campos'; return; }
-  if(senha.length<6){ erro.textContent='Senha mín 6 caracteres'; return; }
+  const aviso=document.getElementById('loginAviso');
+  erro.textContent=''; aviso.textContent='';
+  if(!nome||!email||!senha||!senha2){ erro.textContent='Preencha nome, e-mail e as duas senhas'; return; }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){ erro.textContent='E-mail inválido'; return; }
+  if(senha.length<6){ erro.textContent='A senha precisa ter pelo menos 6 caracteres'; return; }
+  if(senha!==senha2){ erro.textContent='As duas senhas não são iguais'; return; }
 
-  toast('Criando conta...');
-  const { data, error } = await sb.auth.signUp({
-    email, password: senha,
-    options: { data: { nome, cargo } }
-  });
-  if(error){ erro.textContent='Erro: '+error.message; return; }
-  toast('Conta criada! Aguarde o administrador liberar suas permissões.','sucesso');
-  await sb.auth.signOut();
-  mostrarLogin();
-  document.getElementById('loginEmail').value = email;
+  estado.cadastrando=true;
+  const btn=document.getElementById('btnCadastrar');
+  if(btn){ btn.disabled=true; btn.textContent='Enviando...'; }
+  try{
+    const { error } = await sb.auth.signUp({ email, password: senha, options: { data: { nome, cargo } } });
+    if(error){
+      erro.textContent = /already|registered|exists/i.test(error.message||'')
+        ? 'Este e-mail já tem cadastro. Tente entrar; se aparecer "aguardando liberação", é só esperar o administrador.'
+        : 'Não foi possível enviar o pedido: '+error.message;
+      return;
+    }
+    await sb.auth.signOut();
+    ['cadNome','cadCargo','cadEmail','cadSenha','cadSenha2'].forEach(id=>document.getElementById(id).value='');
+    mostrarLogin();
+    document.getElementById('loginEmail').value = email;
+    document.getElementById('loginAviso').textContent='✓ Pedido enviado! Assim que o administrador liberar, entre com este e-mail e senha.';
+  } finally {
+    estado.cadastrando=false;
+    if(btn){ btn.disabled=false; btn.textContent='Enviar pedido de acesso'; }
+  }
 }
 
 async function efetuarLogin(){
@@ -921,12 +942,22 @@ async function efetuarLogin(){
   erro.textContent='';
   if(!email||!senha){ erro.textContent='Preencha e-mail e senha'; return; }
 
+  document.getElementById('loginAviso').textContent='';
   const { data, error } = await sb.auth.signInWithPassword({ email, password: senha });
-  if(error){ erro.textContent='E-mail ou senha incorretos'; return; }
+  if(error){ erro.textContent=traduzirErroLogin(error); return; }
   await carregarUsuarioLogado();
-  if(!usuarioLogado){ erro.textContent='Perfil não encontrado'; await sb.auth.signOut(); return; }
-  if(usuarioLogado.ativo === false){ erro.textContent='Usuário desativado'; await sb.auth.signOut(); usuarioLogado=null; return; }
-  if(estaPendente(usuarioLogado)){ erro.textContent='⏳ Cadastro recebido! Aguarde o administrador liberar seu acesso.'; await sb.auth.signOut(); usuarioLogado=null; return; }
+  if(!usuarioLogado){
+    // Conta criada fora do sistema (ex.: direto no Supabase) fica sem ficha e nao
+    // aparecia para o administrador liberar. Cria a ficha como pedido pendente.
+    const criada = await criarFichaPendente(data && data.user);
+    await sb.auth.signOut(); usuarioLogado=null;
+    erro.textContent = criada
+      ? '⏳ Seu pedido de acesso foi registrado. Aguarde o administrador liberar.'
+      : 'Sua conta existe, mas está sem cadastro no sistema. Avise o administrador.';
+    return;
+  }
+  if(usuarioLogado.ativo === false){ erro.textContent='Seu acesso está bloqueado. Fale com o administrador.'; await sb.auth.signOut(); usuarioLogado=null; return; }
+  if(estaPendente(usuarioLogado)){ erro.textContent='⏳ Seu pedido de acesso está aguardando o administrador liberar.'; await sb.auth.signOut(); usuarioLogado=null; return; }
 
   document.getElementById('loginSenha').value='';
   document.getElementById('telaLogin').classList.remove('ativa');
@@ -952,6 +983,7 @@ function entrarNoSistema(){
   document.getElementById('userAvatar').style.color=PERFIS[usuarioLogado.perfil]?.corTexto||'#ffffff';
   document.getElementById('btnSair').style.display='inline-flex';
   document.getElementById('btnUsuarios').style.display=pode('usuario_gerenciar')?'inline-flex':'none';
+  atualizarAvisoPendentes().then(n=>{ if(n) setTimeout(()=>toast(`⏳ ${n} pedido(s) de acesso aguardando sua liberação em 👥 Usuários`),600); });
   document.getElementById('btnAuditoria').style.display=pode('auditoria_ver')?'inline-flex':'none';
   document.getElementById('btnRelatorioHeader').style.display=pode('relatorio_gerar')?'inline-flex':'none';
   aplicarPermissoesUI();
@@ -967,6 +999,13 @@ function iniciarRealtime(){
     .on('postgres_changes', { event: '*', schema: 'public', table: 'fotos' }, () => { if(estado.pontoAtual) preencherSelectsData(); if(estado.obraAtual) renderPontos(); })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'marcacoes' }, (payload) => { if(estado.fotoAtual && (payload.new?.foto_id===estado.fotoAtual || payload.old?.foto_id===estado.fotoAtual)) carregarVisualizacao(); })
     .on('postgres_changes', { event: '*', schema: 'public', table: 'respostas' }, (payload) => { if(estado.marcacaoAtual && payload.new?.marcacao_id===estado.marcacaoAtual) abrirDetalheMarcacao(estado.marcacaoAtual); })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+      // Pedido novo chega sem precisar recarregar; nao redesenha a lista se o
+      // administrador estiver com o cursor num campo dela (perderia a escolha)
+      atualizarAvisoPendentes();
+      const m=document.getElementById('modalUsuarios');
+      if(m && m.classList.contains('aberto') && !m.contains(document.activeElement)) abrirGerenciarUsuarios();
+    })
     .subscribe();
 }
 
@@ -974,6 +1013,34 @@ function pode(p){ return usuarioLogado && (usuarioLogado.permissoes||[]).include
 function exigirPermissao(p,msg){ if(!pode(p)){ toast('⛔ Sem permissão: '+(msg||PERMISSOES.find(x=>x.id===p)?.label||p),'erro'); return false;} return true; }
 // Cadastro novo que o administrador ainda nao liberou: perfil existe, mas sem nenhuma permissao marcada.
 // Enquanto estiver assim o usuario nao entra no sistema (nao ve obras, fotos nem marcacoes).
+// Traduz o erro do Supabase: antes tudo aparecia como "senha incorreta",
+// o que escondia a causa real de quem nao conseguia entrar.
+function traduzirErroLogin(error){
+  const m=String((error && (error.message||error.code)) || '');
+  if(/invalid login credentials|invalid_credentials/i.test(m)) return 'E-mail ou senha incorretos';
+  if(/email not confirmed|email_not_confirmed/i.test(m)) return 'Seu e-mail ainda não foi confirmado. Abra o link que chegou no seu e-mail.';
+  if(/rate limit|too many|over_request/i.test(m)) return 'Muitas tentativas seguidas. Aguarde um minuto e tente de novo.';
+  if(/failed to fetch|network|load failed/i.test(m)) return 'Sem conexão com o servidor. Verifique a internet.';
+  return 'Não foi possível entrar: '+m;
+}
+
+async function criarFichaPendente(user){
+  if(!user) return false;
+  const meta=user.user_metadata||{};
+  const nome=String(meta.nome||'').trim() || String(user.email||'').split('@')[0];
+  const { error } = await sb.from('profiles').insert({ id:user.id, email:user.email, nome, cargo:meta.cargo||null, permissoes:[] });
+  if(error){ console.error('Não foi possível criar a ficha pendente:', error); return false; }
+  return true;
+}
+
+// aguardando = pediu acesso e ninguem decidiu; recusado = sem permissao e bloqueado
+function classificarUsuario(u){
+  if(!estaPendente(u)) return 'liberado';
+  return (u && u.ativo===false) ? 'recusado' : 'aguardando';
+}
+
+const MSG_SEM_PERMISSAO_BANCO='O banco não aceitou a alteração: seu usuário não tem permissão para mudar outros usuários. Nada foi salvo.';
+
 function estaPendente(u){
   if(!u) return true;
   const p = u.permissoes;
@@ -1035,24 +1102,75 @@ async function abrirGerenciarUsuarios(){
   if(!exigirPermissao('usuario_gerenciar'))return;
   const { data: us, error } = await sb.from('profiles').select('*').order('nome');
   if(error){ toast('Erro: '+error.message,'erro'); return; }
-  // Quem aguarda liberação vai para o topo da lista
-  const lista=(us||[]).slice().sort((a,b)=>(estaPendente(b)?1:0)-(estaPendente(a)?1:0));
-  const qtdPend=lista.filter(u=>estaPendente(u)).length;
+  const peso={aguardando:0, liberado:1, recusado:2};
+  const lista=(us||[]).slice().sort((a,b)=>peso[classificarUsuario(a)]-peso[classificarUsuario(b)]);
+  const qtdPend=lista.filter(u=>classificarUsuario(u)==='aguardando').length;
   const aviso=document.getElementById('avisoPendentes');
-  aviso.textContent = qtdPend ? `⏳ ${qtdPend} usuário(s) aguardando liberação. Clique em ✎ para definir o perfil e liberar o acesso.` : '';
+  aviso.textContent = qtdPend ? `⏳ ${qtdPend} pedido(s) de acesso aguardando. Escolha o perfil e clique em ✓ Liberar.` : '';
   aviso.style.display = qtdPend ? 'block' : 'none';
+  const opcoesPerfil=['campo','visualizador','gerente','admin'].map(k=>`<option value="${k}">${PERFIS[k].nome}</option>`).join('');
   document.getElementById('tbodyUsuarios').innerHTML=lista.map(u=>{
-    const pend=estaPendente(u);
-    const pn=pend?'⏳ Pendente':(PERFIS[u.perfil]?.nome||'Customizado');
-    const cor=pend?'var(--warn)':(PERFIS[u.perfil]?.cor||'var(--ink-soft)');
-    const corTexto=pend?'#1a2b4a':(PERFIS[u.perfil]?.corTexto||'#ffffff');
+    const tipo=classificarUsuario(u);
     const at=u.ativo!==false;
-    return `<tr style="${!at?'opacity:.5;':''}"><td><strong>${escapar(u.nome)}</strong>${u.cargo?`<br><small style="color:var(--ink-soft);">${escapar(u.cargo)}</small>`:''}</td><td>${escapar(u.email)}</td><td><span class="perfil-pill" style="background:${cor}; color:${corTexto};">${escapar(pn)}</span></td><td>${u.criado_em?formatarDataHora(u.criado_em):'-'}</td><td>
-      <button class="small" onclick="editarUsuario('${u.id}')">✎</button>
-      <button class="small" onclick="alternarAtivoUsuario('${u.id}')">${at?'🚫':'✓'}</button>
-    </td></tr>`;
+    const pn = tipo==='aguardando' ? '⏳ Aguardando liberação' : tipo==='recusado' ? '🚫 Recusado' : (PERFIS[u.perfil]?.nome||'Customizado');
+    const cor = tipo==='aguardando' ? 'var(--warn)' : tipo==='recusado' ? 'var(--danger)' : (PERFIS[u.perfil]?.cor||'var(--ink-soft)');
+    const corTexto = tipo==='aguardando' ? '#1a2b4a' : tipo==='recusado' ? '#ffffff' : (PERFIS[u.perfil]?.corTexto||'#ffffff');
+    const acoes = tipo==='aguardando'
+      ? `<div class="acoes-liberar"><select id="perfilRapido_${u.id}" title="Perfil que ele vai receber">${opcoesPerfil}</select><button class="small primary" onclick="liberarUsuario('${u.id}')">✓ Liberar</button><button class="small danger" onclick="recusarUsuario('${u.id}')">✕ Recusar</button></div>`
+      : `<button class="small" onclick="editarUsuario('${u.id}')" title="Editar perfil e permissões">✎</button> <button class="small" onclick="alternarAtivoUsuario('${u.id}')" title="${at?'Bloquear acesso':'Desbloquear'}">${at?'🚫':'✓'}</button>`;
+    return `<tr style="${!at?'opacity:.55;':''}"><td><strong>${escapar(u.nome)}</strong>${u.cargo?`<br><small style="color:var(--ink-soft);">${escapar(u.cargo)}</small>`:''}</td><td>${escapar(u.email)}</td><td><span class="perfil-pill" style="background:${cor}; color:${corTexto};">${escapar(pn)}</span></td><td class="mono">${u.criado_em?formatarDataHora(u.criado_em):'-'}</td><td>${acoes}</td></tr>`;
   }).join('');
   abrirModal('modalUsuarios');
+  atualizarAvisoPendentes();
+}
+
+async function nomeDoUsuario(id){
+  const { data } = await sb.from('profiles').select('nome').eq('id',id).maybeSingle();
+  return (data && data.nome) || 'usuário';
+}
+
+async function liberarUsuario(id){
+  if(!exigirPermissao('usuario_gerenciar'))return;
+  const sel=document.getElementById('perfilRapido_'+id);
+  const perfil=sel ? sel.value : 'campo';
+  const def=PERFIS[perfil];
+  if(!def){ toast('Perfil inválido','erro'); return; }
+  const nome=await nomeDoUsuario(id);
+  if(perfil==='admin' && !confirm(`Dar acesso TOTAL de Administrador para ${nome}?`)) return;
+  const { data, error } = await sb.from('profiles')
+    .update({ perfil, permissoes:def.permissoes, ativo:true, editado_em:new Date().toISOString() })
+    .eq('id',id).select('id');
+  if(error){ toast('Erro ao liberar: '+error.message,'erro'); return; }
+  if(!data || !data.length){ toast(MSG_SEM_PERMISSAO_BANCO,'erro'); return; }
+  await registrarAuditoria('editar','usuario',id,`Liberou o acesso de ${nome} como ${def.nome}`);
+  toast(`✓ Acesso liberado para ${nome} (${def.nome})`,'sucesso');
+  abrirGerenciarUsuarios();
+}
+
+async function recusarUsuario(id){
+  if(!exigirPermissao('usuario_gerenciar'))return;
+  if(usuarioLogado && id===usuarioLogado.id){ toast('Você não pode recusar a si mesmo','erro'); return; }
+  const nome=await nomeDoUsuario(id);
+  if(!confirm(`Recusar o pedido de acesso de ${nome}?\n\nEle não vai conseguir entrar. Se mudar de ideia, dá para liberar depois nesta mesma tela.`)) return;
+  const { data, error } = await sb.from('profiles')
+    .update({ ativo:false, editado_em:new Date().toISOString() })
+    .eq('id',id).select('id');
+  if(error){ toast('Erro ao recusar: '+error.message,'erro'); return; }
+  if(!data || !data.length){ toast(MSG_SEM_PERMISSAO_BANCO,'erro'); return; }
+  await registrarAuditoria('editar','usuario',id,`Recusou o pedido de acesso de ${nome}`);
+  toast(`Pedido de ${nome} recusado`);
+  abrirGerenciarUsuarios();
+}
+
+// Numero de pedidos no botao Usuarios do cabecalho
+async function atualizarAvisoPendentes(){
+  const b=document.getElementById('btnUsuarios');
+  if(!b || !usuarioLogado || !pode('usuario_gerenciar')) return 0;
+  const { data, error } = await sb.from('profiles').select('id,permissoes,ativo');
+  if(error){ console.error(error); return 0; }
+  const n=(data||[]).filter(u=>classificarUsuario(u)==='aguardando').length;
+  b.innerHTML = '👥 Usuários' + (n ? ` <span class="badge-pend" title="${n} pedido(s) de acesso aguardando">${n}</span>` : '');
+  return n;
 }
 
 async function editarUsuario(id){
@@ -1095,8 +1213,9 @@ async function salvarUsuario(){
   const perfil=document.getElementById('usuPerfil').value;
   if(!nome){ toast('Nome obrigatório','erro'); return; }
   const perms=Array.from(document.querySelectorAll('#permGrid input[type=checkbox]:checked')).map(c=>c.value);
-  const { error } = await sb.from('profiles').update({ nome, cargo, perfil, permissoes: perms, editado_em: new Date().toISOString() }).eq('id',id);
+  const { data: gravou, error } = await sb.from('profiles').update({ nome, cargo, perfil, permissoes: perms, ativo: true, editado_em: new Date().toISOString() }).eq('id',id).select('id');
   if(error){ toast('Erro: '+error.message,'erro'); return; }
+  if(!gravou || !gravou.length){ toast(MSG_SEM_PERMISSAO_BANCO,'erro'); return; }
   await registrarAuditoria('editar','usuario',id,`Editou: ${nome}`);
   toast('Salvo','sucesso');
   if(id===usuarioLogado.id){ await carregarUsuarioLogado(); entrarNoSistema(); }
@@ -1108,8 +1227,9 @@ async function alternarAtivoUsuario(id){
   if(id===usuarioLogado.id){ toast('Não pode desativar a si mesmo','erro'); return; }
   const { data: u } = await sb.from('profiles').select('*').eq('id',id).single();
   const novoAtivo = !(u.ativo!==false);
-  const { error } = await sb.from('profiles').update({ ativo: novoAtivo }).eq('id',id);
+  const { data: gravou, error } = await sb.from('profiles').update({ ativo: novoAtivo }).eq('id',id).select('id');
   if(error){ toast('Erro: '+error.message,'erro'); return; }
+  if(!gravou || !gravou.length){ toast(MSG_SEM_PERMISSAO_BANCO,'erro'); return; }
   await registrarAuditoria('editar','usuario',id,`${novoAtivo?'Ativou':'Desativou'}: ${u.nome}`);
   toast(novoAtivo?'Ativado':'Desativado','sucesso');
   abrirGerenciarUsuarios();
