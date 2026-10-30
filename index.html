@@ -825,7 +825,10 @@ function escapar(s){ if(!s)return''; return String(s).replace(/[<>&"']/g, c=>({'
 function formatarData(iso){ if(!iso)return''; const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; }
 function formatarDataHora(ts){ if(!ts)return''; const d=new Date(ts); return d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}); }
 function corDaTag(t){ const x=t.toLowerCase(); if(x.includes('urgente'))return'tag-urgente'; if(x.includes('corrig'))return'tag-corrigir'; if(x.includes('acompanh'))return'tag-acompanhar'; if(x.includes('pendent'))return'tag-pendente'; if(x.includes('resolv'))return'tag-resolvido'; return'tag-outro'; }
-function getStorageUrl(bucket, path){ if(!path)return null; const {data}=sb.storage.from(bucket).getPublicUrl(path); return data.publicUrl+'?t='+Date.now(); }
+// Sem carimbo de hora: com ele o navegador nunca aproveitava o que já baixou e cada foto (7,5 MB em média) vinha inteira
+// de novo a cada abertura. Foto tem nome único e nunca é trocada; a planta é regravada no mesmo nome, por isso leva a
+// data do envio (versao): muda só quando alguém troca a planta.
+function getStorageUrl(bucket, path, versao){ if(!path)return null; const {data}=sb.storage.from(bucket).getPublicUrl(path); return versao? data.publicUrl+'?v='+encodeURIComponent(versao) : data.publicUrl; }
 
 // ============= AUTH =============
 async function inicializar(){
@@ -1352,7 +1355,7 @@ async function renderObraConteudo(){
   if(!planta){ document.getElementById('semPlanta').style.display='block'; document.getElementById('comPlanta').style.display='none'; return; }
   document.getElementById('semPlanta').style.display='none';
   document.getElementById('comPlanta').style.display='grid';
-  const url=getStorageUrl('plantas',planta.storage_path);
+  const url=getStorageUrl('plantas',planta.storage_path,planta.enviado_em);
   const img=document.getElementById('plantaImg');
   img.onload=()=>{ carregarPreferenciasObra(); renderPontos(); };
   img.src=url;
@@ -1567,7 +1570,7 @@ async function renderMiniMapaPlanta(ponto){
       box.style.display='block';
     };
     img.onerror = () => { box.style.display='none'; };
-    img.src = getStorageUrl('plantas',planta.storage_path);
+    img.src = getStorageUrl('plantas',planta.storage_path,planta.enviado_em);
   } catch(e){ console.error(e); box.style.display='none'; }
 }
 
@@ -2457,7 +2460,7 @@ async function gerarRelatorio(){
   const respsPorMarc={}; (respostas||[]).forEach(r=>{ respsPorMarc[r.marcacao_id]=respsPorMarc[r.marcacao_id]||[]; respsPorMarc[r.marcacao_id].push(r); });
 
   const dataRel=new Date().toLocaleDateString('pt-BR');
-  const plantaUrl = planta ? getStorageUrl('plantas',planta.storage_path) : null;
+  const plantaUrl = planta ? getStorageUrl('plantas',planta.storage_path,planta.enviado_em) : null;
   const logoSVG = '<svg class="logo-img" viewBox="0 0 240 200"><use href="#logo-engcontrol"/></svg>';
   const logoFim = '<svg class="rel-fim-logo" viewBox="0 0 240 200"><use href="#logo-engcontrol"/></svg>';
 
